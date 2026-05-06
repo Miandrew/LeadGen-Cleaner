@@ -1,0 +1,1168 @@
+Build a full-stack commercial cleaning lead generation directory called 
+CommercialCleaningNearMe.com.
+
+Tech stack: Next.js 14 with App Router, TypeScript, Tailwind CSS, Supabase, 
+Stripe, Resend. Deploy target is Vercel but build locally first.
+
+---
+
+BUSINESS LOGIC
+
+A facility manager visits the site, searches for cleaning companies in their 
+city, selects up to 3 companies, and submits a free quote request. All 
+selected companies receive an email with partial lead info. Each company pays 
+$35 to unlock full contact details (name, phone, email). One flat price, no 
+tiers. This is the core revenue mechanic.
+
+Secondary revenue: monthly subscriptions where cleaning companies pay a flat 
+rate and leads auto-deliver to them without additional payment per lead.
+
+---
+
+ENVIRONMENT VARIABLES
+
+Create a .env.local file with these keys — leave values as placeholder 
+strings, the user will fill them in:
+
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=your_stripe_publishable_key
+STRIPE_SECRET_KEY=your_stripe_secret_key
+STRIPE_WEBHOOK_SECRET=your_stripe_webhook_secret
+STRIPE_STARTER_PRICE_ID=your_starter_price_id
+STRIPE_GROWTH_PRICE_ID=your_growth_price_id
+STRIPE_UNLIMITED_PRICE_ID=your_unlimited_price_id
+RESEND_API_KEY=your_resend_api_key
+GOOGLE_PLACES_API_KEY=your_google_places_api_key
+ADMIN_PASSWORD=your_admin_password
+NEXT_PUBLIC_SITE_URL=https://commercialcleaningnearme.com
+ADMIN_EMAIL=your_personal_email@gmail.com
+
+---
+
+DATABASE SCHEMA
+
+Create a file called supabase/schema.sql with this exact SQL. The user will 
+run this in their Supabase SQL editor:
+
+create table companies (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  slug text unique,
+  website text,
+  phone text,
+  email text,
+  address text,
+  city text,
+  state text,
+  zip text,
+  services text[],
+  rating float,
+  review_count int default 0,
+  description text,
+  place_id text,
+  image_urls text[],
+  logo_url text,
+  claimed boolean default false,
+  active boolean default true,
+  do_not_email boolean default false,
+  years_in_business int,
+  certifications text[],
+  employee_count text,
+  created_at timestamp default now()
+);
+
+create table reviews (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid references companies(id),
+  author text,
+  rating float,
+  review_text text,
+  review_date text,
+  source text default 'google',
+  created_at timestamp default now()
+);
+
+create table leads (
+  id uuid primary key default gen_random_uuid(),
+  service_type text,
+  city text,
+  state text,
+  contact_name text,
+  contact_email text,
+  contact_phone text,
+  business_name text,
+  building_type text,
+  building_size text,
+  frequency text,
+  message text,
+  selected_company_ids uuid[],
+  status text default 'open',
+  created_at timestamp default now()
+);
+
+create table lead_purchases (
+  id uuid primary key default gen_random_uuid(),
+  lead_id uuid references leads(id),
+  company_id uuid references companies(id),
+  amount_paid float default 35,
+  stripe_payment_id text unique,
+  purchased_at timestamp default now()
+);
+
+create table users (
+  id uuid primary key default gen_random_uuid(),
+  email text unique,
+  company_id uuid references companies(id),
+  role text default 'company',
+  stripe_customer_id text,
+  subscription_status text,
+  subscription_tier text,
+  leads_remaining int default 0,
+  created_at timestamp default now()
+);
+
+create table company_onboarding (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid references companies(id),
+  how_getting_clients text[],
+  biggest_challenge text,
+  new_clients_per_month text,
+  marketing_budget text,
+  segment text,
+  contacted boolean default false,
+  created_at timestamp default now()
+);
+
+create table featured_listings (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid references companies(id),
+  placement_type text,
+  state text,
+  city text,
+  stripe_subscription_id text,
+  active boolean default true,
+  starts_at timestamp,
+  ends_at timestamp
+);
+
+create table email_sequences (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid references companies(id),
+  sequence_name text,
+  sent_at timestamp default now(),
+  unique(company_id, sequence_name)
+);
+
+create index on companies(city);
+create index on companies(state);
+create index on companies(rating);
+create index on companies(claimed);
+create index on leads(status);
+create index on leads(contact_email);
+create index on leads(created_at);
+create index on lead_purchases(stripe_payment_id);
+
+Also create a Supabase RPC function:
+
+create or replace function decrement_leads(p_company_id uuid)
+returns int as $$
+declare
+  current_remaining int;
+begin
+  select leads_remaining into current_remaining
+  from users where company_id = p_company_id;
+  if current_remaining > 0 then
+    update users set leads_remaining = leads_remaining - 1
+    where company_id = p_company_id;
+    return current_remaining - 1;
+  else
+    return -1;
+  end if;
+end;
+$$ language plpgsql;
+
+---
+
+SUPABASE CLIENT
+
+Create lib/supabase.ts:
+
+import { createClient } from '@supabase/supabase-js'
+
+export const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+export const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+---
+
+DATA IMPORT SCRIPT
+
+Create scripts/import.ts — a Node script the user runs once to import their 
+cleaned CSV into Supabase:
+
+import { createClient } from '@supabase/supabase-js'
+import fs from 'fs'
+import path from 'path'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+function generateSlug(name: string, city: string): string {
+  return `${name}-${city}`
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .trim()
+}
+
+async function importCSV(filePath: string) {
+  const content = fs.readFileSync(filePath, 'utf-8')
+  const lines = content.split('\n')
+  const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''))
+  
+  let inserted = 0
+  let skipped = 0
+
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue
+    
+    const values = lines[i].split(',').map(v => v.trim().replace(/"/g, ''))
+    const row: any = {}
+    headers.forEach((h, idx) => { row[h] = values[idx] || '' })
+
+    if (!row.name && !row.city) { skipped++; continue }
+
+    const slug = generateSlug(row.name || '', row.city || '')
+
+    const { data: existing } = await supabase
+      .from('companies')
+      .select('id')
+      .eq('slug', slug)
+      .single()
+
+    if (existing) { skipped++; continue }
+
+    const services = row.services_clean 
+      ? row.services_clean.split(',').map((s: string) => s.trim()).filter(Boolean)
+      : []
+
+    const { data: company, error } = await supabase
+      .from('companies')
+      .insert({
+        name: row.name,
+        slug,
+        city: row.city,
+        state: row.state,
+        phone: row.phone,
+        email: row.email,
+        website: row.website,
+        address: row.address,
+        rating: parseFloat(row.rating) || null,
+        review_count: parseInt(row.review_count) || 0,
+        place_id: row.place_id,
+        services,
+        active: true,
+      })
+      .select()
+      .single()
+
+    if (error) { console.error(`Error inserting ${row.name}:`, error); skipped++; continue }
+
+    inserted++
+    if (inserted % 100 === 0) console.log(`Inserted: ${inserted}`)
+  }
+
+  console.log(`Done. Inserted: ${inserted}, Skipped: ${skipped}`)
+}
+
+importCSV(process.argv[2] || 'master_clean.csv')
+
+---
+
+DESIGN SYSTEM
+
+Colors: Navy #1B3A6B (primary), Blue #2563EB (accent), White background.
+Use Tailwind throughout. No external component libraries needed.
+All pages must be fully responsive — mobile first at 375px.
+
+---
+
+FILE STRUCTURE TO BUILD
+
+app/
+  page.tsx
+  search/page.tsx
+  company/[slug]/page.tsx
+  quote/page.tsx
+  quote/success/page.tsx
+  claim/[slug]/page.tsx
+  login/page.tsx
+  dashboard/page.tsx
+  dashboard/listing/page.tsx
+  dashboard/leads/page.tsx
+  dashboard/subscription/page.tsx
+  unlock-lead/[lead_id]/[company_id]/page.tsx
+  lead-unlocked/[lead_id]/[company_id]/page.tsx
+  admin/page.tsx
+  admin/intelligence/page.tsx
+  admin/companies/page.tsx
+  admin/leads/page.tsx
+  admin/revenue/page.tsx
+  unsubscribe/page.tsx
+  commercial-cleaning/[state]/page.tsx
+  commercial-cleaning/[city_state]/page.tsx
+  commercial-cleaning-near-me/[city_state]/page.tsx
+  [service_cleaning]/[city_state]/page.tsx
+  [service_cleaning]/[state]/page.tsx
+  sitemap.xml/route.ts
+  robots.txt/route.ts
+  api/
+    leads/create/route.ts
+    create-checkout-session/route.ts
+    subscribe/route.ts
+    claim/route.ts
+    webhooks/stripe/route.ts
+    cron/sequences/route.ts
+    cron/reset-leads/route.ts
+components/
+  Header.tsx
+  CompanyCard.tsx
+  CompanyLogo.tsx
+  Skeleton.tsx
+  StarRating.tsx
+  SelectionBar.tsx
+  QuoteForm.tsx
+lib/
+  supabase.ts
+  stripe.ts
+  resend.ts
+  utils.ts
+scripts/
+  import.ts
+supabase/
+  schema.sql
+vercel.json
+
+---
+
+BUILD EACH FILE NOW:
+
+--- app/page.tsx ---
+
+Server component. Fetch company counts per service and per state from 
+Supabase server-side.
+
+Header: Logo "CommercialCleaningNearMe.com" in navy bold left. Nav right: 
+Browse Directory (/search), For Cleaning Companies (/claim), Login (/login). 
+Mobile hamburger with slide-out drawer.
+
+Hero section: Full-width, white background. H1: "Find Trusted Commercial 
+Cleaning Companies Near You" — large navy bold. Subheading: "Browse 10,000+ 
+verified commercial cleaning companies across all 50 states. Compare 
+services, read real reviews, and request free quotes." — gray text. 
+
+Search form below: text input placeholder "Enter city or zip code", service 
+dropdown (All Services, Office Cleaning, Janitorial, Medical Cleaning, 
+Industrial, Carpet Cleaning, Window Cleaning, Floor Care, Post-Construction), 
+navy Search button. On submit navigate to /search?city=[value]&service=[value].
+
+Trust bar below search: "10,000+ Companies Listed | All 50 States | Real 
+Google Reviews | Free to Search" — small gray text with dividers.
+
+How It Works: 3-column grid. Step 1: magnifying glass icon, "Search Your 
+City", "Enter your city and service type to find local cleaners". Step 2: 
+star icon, "Compare & Review", "Read real Google reviews and compare 
+companies side by side". Step 3: envelope icon, "Request Free Quotes", 
+"Select up to 3 companies and get quotes in 24 hours".
+
+Service Grid: 8 cards in 4x2 grid. Each card: icon, service name bold, 
+"[count] companies" in gray, links to /search?service=[name]. Services: 
+Office Cleaning, Janitorial, Medical Cleaning, Industrial, Carpet Cleaning, 
+Window Cleaning, Floor Care, Post-Construction.
+
+Top States: Heading "Browse by State". Grid of 10 state cards showing state 
+name and company count. Link each to /commercial-cleaning/[state-lowercase].
+
+Footer: Navy background white text. Three columns: Browse (links to all 50 
+states), For Companies (Claim Listing /claim, Dashboard /dashboard, 
+Pricing /dashboard/subscription), Legal (About, Contact, Privacy Policy, 
+Terms of Service).
+
+--- app/search/page.tsx ---
+
+Client component. Reads URL params: city, state, service, rating, verified, 
+sort, page.
+
+Layout: sidebar left 240px desktop, full-width filter bar mobile.
+
+Sidebar filters:
+- "Service Type" heading with checkboxes for each service
+- "Minimum Rating" heading with slider 1-5, shows "[value]+ stars"
+- "Verified Only" toggle
+- "Apply Filters" button that updates URL params
+
+Main area:
+- Results count: "Showing [X] companies[in [City], [State]]"
+- Sort dropdown: Best Rated, Most Reviewed, Newest
+- Grid of CompanyCard components, 20 per page
+- Pagination at bottom
+
+Company selection state: array of up to 3 selected company IDs stored in 
+useState. When user tries to select 4th, show toast notification: "Maximum 3 
+companies — deselect one to add another." Toast disappears after 3 seconds.
+
+SelectionBar: fixed to bottom of screen when 1+ companies selected. Shows 
+"[X] companies selected — $35 each to unlock" and navy button "Request 
+Quotes →" that navigates to /quote?companies=[comma-separated IDs].
+
+Supabase query: 
+- Filter where active=true
+- If city param: where city ilike '%[city]%'
+- If state param: where state=[state]
+- If service param: where services contains [service]
+- If rating param: where rating >= [value]
+- If verified param: where claimed=true
+- Order by rating desc
+- Range for pagination: from (page-1)*20 to page*20-1
+
+--- components/CompanyCard.tsx ---
+
+Props: company object, isSelected boolean, onToggle function.
+
+Display:
+- Logo: try logo_url, fallback to img src="https://logo.clearbit.com/[domain]" 
+  with onError, final fallback div with company initials in white on navy 
+  background
+- Company name as link to /company/[slug] — navy, hover underline
+- City, State in gray small text
+- Star rating (filled amber stars) + "(X reviews)" 
+- Up to 3 service tags as small gray pills
+- "Verified" green badge if claimed=true
+- Description truncated to 100 chars in gray small text
+- Checkbox at bottom labeled "Select for Quote" — checked when isSelected
+
+Card style: white bg, 1px border, subtle shadow on hover, rounded-lg.
+
+--- components/CompanyLogo.tsx ---
+
+Props: company (name, logo_url, website), size (sm/md/lg).
+Implements the 3-step fallback: logo_url → clearbit → initials.
+Initials: first letter of each word in company name, max 2 letters, white 
+text on navy background.
+
+--- app/company/[slug]/page.tsx ---
+
+Server component. Fetch company by slug from Supabase. Fetch their reviews.
+If company not found, return notFound().
+
+Section 1 — Header card:
+CompanyLogo (lg size), company name H1, city + state, star rating + review 
+count, service tags, certifications if any. Phone number as <a href="tel:..."> 
+click-to-call button. Website as external link button. If claimed=false, 
+show "Claim This Listing →" link in gray text.
+
+Section 2 — Photos:
+Only render if image_urls is non-empty. Grid: first photo large (col-span-2), 
+remaining up to 4 smaller. Clicking any photo shows lightbox modal.
+
+Google Places photo logic (server-side):
+- If image_urls is non-empty array: use those, do NOT call Places API
+- If image_urls is null or empty AND place_id exists: 
+  fetch from Google Places API, await write to Supabase image_urls, then render
+- Log "Fetching Places photos for: [company name]" when API is called
+
+Section 3 — About:
+Services as colored tags. Certifications list. Years in business. Employee 
+count. Description paragraph. Skip any empty fields.
+
+Section 4 — Quote Request (placeholder):
+Blue card with "Request a Free Quote from [Company Name]". Subtext: "Get a 
+response within 24 hours." Navy button "Request Quote" that navigates to 
+/quote?companies=[company.id] and scrolls to top.
+
+Section 5 — Map:
+If address exists: Google Maps iframe embed.
+src="https://maps.google.com/maps?q=[encodeURIComponent(address)]&output=embed"
+100% width, 300px height, rounded-lg.
+
+Section 6 — Reviews:
+Average rating display with star icons. Total review count. Each review as 
+card: reviewer name bold, stars, date formatted "Month DD, YYYY", review 
+text. If no reviews: "No reviews yet for this company."
+
+generateMetadata: title "[Company Name] — Commercial Cleaning in [City], [State]"
+description "[Company Name] offers [services joined] in [City], [State]. 
+Rated [rating] stars from [review_count] reviews. Request a free quote today."
+
+Add LocalBusiness JSON-LD schema script tag in the head.
+
+--- app/quote/page.tsx ---
+
+Client component. Reads URL params: companies (comma-separated IDs), pre-fills 
+location from any available context.
+
+3-step form using useState for current step. Show step indicator at top 
+(Step 1 of 3, etc).
+
+Step 1 — Service Details:
+Service needed (select, same options as search dropdown)
+Building type (select: Office Building, Medical Facility, 
+  Industrial/Warehouse, Retail Store, School/University, Restaurant, Other)
+Building size (select: Under 1,000 sq ft, 1,000–5,000 sq ft, 
+  5,000–20,000 sq ft, Over 20,000 sq ft)
+Cleaning frequency (select: Daily, 3x per week, Weekly, 
+  Bi-weekly, Monthly, One-time deep clean)
+City (text input)
+State (select all 50 states)
+"Next →" button validates all fields before advancing.
+
+Step 2 — Your Details:
+Full name (required)
+Company or building name (required)
+Email address (required, validate format)
+Phone number (required, validate starts with digit, 10+ chars)
+Additional notes (textarea, optional)
+"← Back" and "Next →" buttons.
+
+Step 3 — Review and Submit:
+Show summary of Step 1 details in a card.
+Fetch selected companies from Supabase by the IDs in URL params.
+Show each company as a small card with logo, name, city.
+Blue info box: "Your contact details will only be shared with the [X] 
+companies shown above. You will not be contacted by any other company."
+"← Back" and "Send Quote Request — Free" submit button.
+
+On submit:
+POST to /api/leads/create with all form data and company IDs.
+Show loading state on button.
+On success: navigate to /quote/success.
+On error: show error message inline.
+
+--- app/quote/success/page.tsx ---
+
+Simple page. "Your Request Has Been Sent ✓" heading in navy.
+"Your quote request has been sent to [X] cleaning companies."
+"They will review your details and contact you within 24 hours."
+"Check your email for a confirmation message."
+No further CTAs. Clean and reassuring.
+
+--- api/leads/create/route.ts ---
+
+POST handler.
+
+1. Parse request body for all lead fields + selected_company_ids array.
+
+2. Duplicate check: query leads table where contact_email matches AND 
+   created_at > now() - interval '7 days'. If found, return 
+   { success: true, duplicate: true } — do not insert.
+
+3. Validate required fields: service_type, city, state, contact_name, 
+   contact_email, contact_phone, business_name, selected_company_ids 
+   (must be array with 1-3 items).
+
+4. Insert lead to Supabase leads table. Return lead ID.
+
+5. Send 3 emails in parallel via Promise.all:
+
+   Email A — To each company in selected_company_ids:
+   Query company email from companies table. Skip if no email or do_not_email=true.
+   From: leads@commercialcleaningnearme.com
+   Subject: "New Lead — [service_type] in [city], [state]"
+   HTML body:
+   - Header: "You have a new lead on CommercialCleaningNearMe.com"
+   - Details card: Location, Service, Building Type, Building Size, Frequency
+   - Note: "This lead was sent to [X] companies total."
+   - Big CTA button: "Unlock Full Contact Details — $35"
+     href: NEXT_PUBLIC_SITE_URL/unlock-lead/[lead_id]/[company_id]
+   - Footer: "Lead expires in 72 hours."
+
+   Email B — Admin notification to ADMIN_EMAIL:
+   Subject: "New Lead — [service] in [city] [state]"
+   Body: all lead details, company names notified, timestamp.
+
+   Email C — Confirmation to contact_email:
+   Subject: "Your quote request has been sent"
+   Body: "Hi [first name from contact_name], your request for [service_type] 
+   in [city] has been sent to [X] cleaning companies. They will contact you 
+   within 24 hours."
+
+6. If any email fails, log error but DO NOT fail the request. Lead saves 
+   regardless of email status.
+
+7. Return { success: true, leadId: lead.id }
+
+--- app/unlock-lead/[lead_id]/[company_id]/page.tsx ---
+
+Server component.
+
+1. Fetch lead from Supabase by lead_id.
+2. Verify company_id is in lead.selected_company_ids. 
+   If not: show error card "This lead is not available to your account."
+3. Check lead_purchases for existing record with this lead_id + company_id.
+   If found: redirect to /lead-unlocked/[lead_id]/[company_id].
+4. If lead.created_at is more than 72 hours ago: show "This lead has expired."
+5. Otherwise show the payment page:
+
+Payment page layout:
+- Heading: "New Lead in [city], [state]"
+- Preview card: Service, Building Type, Building Size, Frequency, 
+  "Submitted [relative time]"
+- Blurred placeholder section with CSS blur for contact info area
+- Price: "$35 to unlock full contact details"
+- Value text: "Gain access to full name, company, email, and phone number. 
+  They are actively looking for [service_type] in [city] right now."
+- Note: "This lead was shared with [X] companies total."
+- Button: "Unlock Contact Details — $35" (client component button that 
+  POSTs to /api/create-checkout-session and redirects to Stripe)
+
+--- api/create-checkout-session/route.ts ---
+
+POST handler. Receives lead_id and company_id.
+Creates Stripe checkout session:
+- mode: 'payment'
+- amount: 3500 (cents = $35)
+- currency: 'usd'
+- success_url: NEXT_PUBLIC_SITE_URL/lead-unlocked/[lead_id]/[company_id]
+- cancel_url: NEXT_PUBLIC_SITE_URL/unlock-lead/[lead_id]/[company_id]
+- metadata: { lead_id, company_id }
+Returns { url: session.url }
+
+--- app/lead-unlocked/[lead_id]/[company_id]/page.tsx ---
+
+Server component.
+Check lead_purchases for this lead_id + company_id. If not found, redirect 
+to /unlock-lead/[lead_id]/[company_id].
+Fetch full lead details.
+
+Show:
+- "Contact Details Unlocked ✓" heading in green
+- Contact card: Full Name, Company/Building Name, Email (mailto link), 
+  Phone (tel link), Message if provided
+- Note based on total companies: if 1 company total "You are the only 
+  company with this contact — reach out immediately." If multiple: 
+  "This contact was also shared with [X-1] other companies — be the first 
+  to reach out."
+- Button: "View All Your Leads" → /dashboard/leads
+
+--- api/webhooks/stripe/route.ts ---
+
+POST handler. Raw body required for signature verification.
+Verify Stripe signature using STRIPE_WEBHOOK_SECRET.
+
+Handle checkout.session.completed:
+- Extract lead_id and company_id from session.metadata
+- Upsert to lead_purchases with onConflict on stripe_payment_id 
+  (prevents duplicate inserts if webhook fires twice)
+- Send receipt email to company via Resend
+- Send admin notification
+
+Handle customer.subscription.created:
+- Extract company_id from metadata
+- Determine plan from price ID: starter=3, growth=8, unlimited=999
+- Update users: subscription_status='active', subscription_tier=[plan], 
+  leads_remaining=[amount]
+
+Handle customer.subscription.deleted:
+- Update users: subscription_status='cancelled', leads_remaining=0
+
+Handle invoice.payment_failed:
+- Update users: subscription_status='past_due'
+- Send warning email to company
+
+--- app/claim/[slug]/page.tsx ---
+
+Client component.
+Fetch company by slug server-side. Show company name + city at top.
+
+3-step form:
+
+Step 1: Full name, Role (Owner/Manager/Marketing/Other dropdown), Email, 
+Phone, Checkbox "I confirm I am authorized to manage this listing for 
+[company name]". Next validates all.
+
+Step 2: Password (min 8 chars), Confirm password. Show password strength 
+indicator (weak/medium/strong based on length and character variety). 
+Next validates match and minimum length.
+
+Step 3 — Onboarding Survey. This is mandatory. No skip option. 
+Style each question as a grid of large clickable cards, not dropdowns.
+Selected cards get navy border and background tint.
+
+Q1 — "How are you currently getting new clients?" (multi-select, cards):
+- Word of mouth and referrals
+- Google Ads
+- Social media marketing  
+- Other directories or platforms
+- We struggle to find new clients consistently
+
+Q2 — "What is your biggest challenge right now?" (single select, cards):
+- Not getting enough leads
+- Leads cost too much
+- Hard to compete on price
+- Getting more reviews
+- Managing existing clients
+
+Q3 — "How many new clients are you looking to add per month?" (single, cards):
+- 1–2 new clients
+- 3–5 new clients
+- 5–10 new clients
+- 10 or more
+
+Q4 — "What is your monthly marketing budget?" (single, cards):
+- Under $200/month
+- $200–$500/month
+- $500–$1,000/month
+- Over $1,000/month
+
+Submit button: "Complete Setup and Claim My Listing →"
+
+On submit POST to /api/claim with all data.
+On success redirect to /dashboard.
+
+--- api/claim/route.ts ---
+
+POST handler.
+
+1. Create Supabase auth user with email and password.
+2. Insert users row with email and company_id.
+3. Update companies: set claimed=true.
+4. Insert company_onboarding with all survey answers.
+5. Calculate segment:
+   - HOT: biggest_challenge = 'Not getting enough leads' AND 
+     marketing_budget is '$500–$1,000/month' or 'Over $1,000/month'
+   - WARM: biggest_challenge = 'Not getting enough leads' AND 
+     marketing_budget is '$200–$500/month'
+   - NURTURE: everything else
+6. Update company_onboarding with segment.
+7. Send segment-appropriate email:
+
+   HOT email from yourname@commercialcleaningnearme.com:
+   Subject: "Leads available in [city] this week — [company name]"
+   Body (personal tone): "Hi [first name], welcome to 
+   CommercialCleaningNearMe.com. Based on what you shared, getting more 
+   leads is your main challenge — and that's exactly what we do. I want to 
+   personally show you what leads are available in your area right now, no 
+   commitment required. Reply to this email and I'll send you a preview. 
+   [Your name]"
+
+   WARM email:
+   Subject: "Your listing is live — leads available in [city]"
+   Body: "Hi [first name], your listing is now live. Facility managers in 
+   [city] are actively searching. Leads available from $35 each in your 
+   dashboard. [View Available Leads] button"
+
+   NURTURE email:
+   Subject: "Your listing is live on CommercialCleaningNearMe.com"
+   Body: "Hi [first name], your listing is live and visible to facility 
+   managers in [city]. Complete your profile to appear higher in search 
+   results. [Complete Your Profile] button"
+
+8. Send admin notification to ADMIN_EMAIL:
+   "New listing claimed. Company: [name]. City: [city]. Email: [email]. 
+   Segment: [HOT/WARM/NURTURE]. Challenge: [value]. Budget: [value]. 
+   Timestamp: [now]"
+
+9. Sign in user with Supabase auth.
+10. Return { success: true }
+
+--- app/login/page.tsx ---
+
+Client component. Email + password form. Supabase signInWithPassword. 
+On success redirect to /dashboard. Show inline error on failure.
+Link at bottom: "Don't have an account? Claim your listing →" to /claim.
+
+--- app/dashboard/page.tsx ---
+
+Server component. Get Supabase session — redirect to /login if none.
+Fetch company by session user's company_id.
+
+Layout: Left sidebar 200px (mobile: hamburger toggle).
+Sidebar nav links: Overview, My Listing (/dashboard/listing), 
+Available Leads (/dashboard/leads), Subscription (/dashboard/subscription), 
+Settings, Log Out.
+
+Overview content:
+- "Welcome back, [company name]" heading
+- Profile completion card: progress bar 0-100% based on filled fields 
+  (logo_url, description, services length, phone, website, certifications).
+  Below bar: checklist of incomplete items with links to fix them.
+- Stats row (3 cards):
+  - "Leads Available" — count of open leads in their city+state last 72 hours
+  - "Leads Purchased" — count of their lead_purchases
+  - "Subscription" — their current plan or "No Plan"
+- Recent purchases: last 3 lead_purchases as cards showing service, city, 
+  date, amount paid.
+- Quick action buttons: "View Available Leads", "Complete Your Profile"
+
+--- app/dashboard/listing/page.tsx ---
+
+Client component with session check.
+Form to edit company fields: description (textarea), services (multi-select 
+checkboxes), certifications (tag input — type and press enter to add), 
+phone, email, website, years_in_business, employee_count (select: 1-5, 
+6-15, 16-30, 31-50, 50+).
+
+Logo upload: file input (png/jpg), on select upload to Supabase storage 
+bucket 'company-logos', update logo_url in companies table.
+
+Right side (desktop): live preview of CompanyCard with current values.
+
+Save button: update companies table with all changed values. Show success 
+toast on save.
+
+--- app/dashboard/leads/page.tsx ---
+
+Client component with session check.
+Two tabs: "Available Leads" and "Purchased Leads".
+
+Available Leads tab:
+Fetch open leads where city or state matches company's location, 
+created_at within last 72 hours.
+Table columns: Service, Building Type, City, Time Since Submitted, 
+"Unlock for $35" button.
+All contact fields shown as "••••••••".
+Empty state: "No new leads in your area in the last 72 hours."
+
+Purchased Leads tab:
+Fetch lead_purchases for this company joined with leads table.
+Show full details: Name, Company, Email (mailto link), Phone (tel link), 
+Service, Date Purchased.
+
+--- app/dashboard/subscription/page.tsx ---
+
+Client component. Show current subscription status if active.
+Three plan cards:
+
+Starter — $99/month
+3 leads delivered automatically per month
+No per-lead payment required
+"Start Starter Plan" button
+
+Growth — $199/month (show "Most Popular" badge, blue border)  
+8 leads delivered automatically per month
+Featured badge on your listing
+"Start Growth Plan" button
+
+Unlimited — $399/month
+All leads in your state delivered automatically  
+First priority on all new leads
+"Start Unlimited Plan" button
+
+Each button POSTs to /api/subscribe with the plan ID and redirects to 
+Stripe checkout. If already subscribed, show current plan with green 
+"Active" badge and "Cancel Subscription" link.
+
+--- api/subscribe/route.ts ---
+
+POST handler. Receives plan_id.
+Get session user's company, get or create Stripe customer.
+Create Stripe subscription checkout session for the price ID.
+Return { url: checkoutSession.url }
+
+--- api/leads/create/route.ts (subscription delivery addition) ---
+
+After inserting the lead and before sending unlock emails, for each company 
+in selected_company_ids:
+1. Fetch that company's user record
+2. If subscription_status='active' and leads_remaining > 0:
+   - Call decrement_leads RPC function with company_id
+   - If returns -1: send email "Your monthly allowance is used up"
+   - If returns >= 0: send direct delivery email with FULL contact details 
+     immediately (no payment needed). Subject: "New Lead Delivered — 
+     [service] in [city]". Include all contact info in the email.
+3. If no active subscription: send normal $35 unlock email
+
+--- app/admin/page.tsx ---
+
+Password gate: check cookie against ADMIN_PASSWORD. Show password form if 
+not authenticated. On correct password set httpOnly cookie. 
+
+Add simple in-memory rate limiter using a Map: track failed attempts by IP. 
+After 5 failures within 15 minutes return 429. Reset on success.
+
+Overview page content:
+Stats cards: Total Companies, Total Claimed, Leads Today, Revenue Today 
+(sum of today's lead_purchases.amount_paid), Revenue This Month.
+30-day revenue bar chart using recharts library.
+Activity feed: last 5 leads submitted, last 5 purchases, last 5 claims.
+Each with timestamp.
+
+--- app/admin/intelligence/page.tsx ---
+
+Fetch all company_onboarding joined with companies table.
+Group by segment.
+
+Three tab buttons: HOT (red badge with count), WARM (orange badge), 
+NURTURE (gray badge). Default to HOT tab.
+
+Each tab: table with columns:
+Company Name (clicking row expands to show ALL survey answer details below),
+City, State, Email (as mailto: link), Biggest Challenge, Marketing Budget, 
+Clients Wanted, Date Claimed, Contacted (toggle button).
+
+Contacted toggle: PATCH to update company_onboarding.contacted boolean.
+Contacted rows show with slightly grayed styling.
+
+"Export as CSV" button: generates and downloads CSV of all visible rows.
+
+--- app/admin/companies/page.tsx ---
+
+Search input debounced 300ms, queries companies by name or city ilike.
+Filter dropdowns: State, Claimed (all/yes/no), Active (all/yes/no).
+Results table: name, city, state, claimed badge, active badge, rating, 
+date added, "Edit" button.
+Edit opens a modal to edit any field inline.
+Active toggle per row.
+
+--- app/admin/leads/page.tsx ---
+
+All leads newest first.
+Table: date, city, state, service type, total companies notified, 
+purchases count (join lead_purchases), total revenue from this lead, status.
+Clicking row opens modal showing:
+Full contact details, all selected company names, all purchases with company 
+name + timestamp + amount.
+
+--- app/admin/revenue/page.tsx ---
+
+Stats: Revenue All Time, This Month, Last Month, Average Lead Value.
+Revenue by type: pay-per-lead vs subscriptions (from users table).
+Table: Top 10 companies by total spend (sum of lead_purchases.amount_paid).
+
+--- api/cron/sequences/route.ts ---
+
+GET handler called by Vercel Cron daily at 9am UTC.
+
+Before any send:
+- Check email_sequences table for (company_id, sequence_name) — skip if found
+- Check companies.do_not_email — skip if true
+
+Sequence 'hot_48h':
+Find company_onboarding where segment='HOT', contacted=false, 
+created_at between 47-49 hours ago.
+For each: count leads in their city from last 7 days.
+Send from admin personal email. Personal tone.
+Subject: "Quick question about leads in [city]"
+Body: "Hi [first name], I noticed you claimed your listing a couple of days 
+ago and wanted to personally check in. We had [count] new leads come through 
+in [city] this week. I think there might be a good fit here. Have you had a 
+chance to look at the leads in your dashboard? Reply to this email and I'll 
+walk you through it. [Your name]"
+Insert email_sequences record after sending.
+
+Sequence 'warm_7d':
+segment=WARM, no lead_purchase exists for company_id, 
+created_at between 6.5-7.5 days ago.
+Subject: "[count] leads in [city] this week — [company name]"
+Professional tone. $35 price. Link to /dashboard/leads.
+
+Sequence 'all_14d':
+Any claimed company, no lead_purchase, created_at 13.5-14.5 days ago.
+Subject: "How your listing is performing — [company name]"
+Mention available leads, encourage first purchase.
+
+Sequence 'all_30d':
+Any claimed company, no purchase, created_at 29-31 days ago.
+Brief friendly final nudge.
+
+All sequence emails: 
+Add unsubscribe footer: "Unsubscribe" link to 
+/unsubscribe?company=[id]&token=[hmac-sha256 of company_id+secret]
+
+--- app/unsubscribe/page.tsx ---
+
+Server component. Verify token (hmac-sha256 of company_id + ADMIN_PASSWORD 
+as secret). If valid: update companies.do_not_email=true. Show "You have 
+been unsubscribed from all emails."
+
+--- api/cron/reset-leads/route.ts ---
+
+GET handler. Called by Vercel Cron on 1st of each month.
+For all users where subscription_status='active':
+- If subscription_tier='starter': set leads_remaining=3
+- If subscription_tier='growth': set leads_remaining=8
+- If subscription_tier='unlimited': set leads_remaining=999
+
+--- pSEO PAGES ---
+
+For all programmatic SEO pages, use this strategy:
+- generateStaticParams only for top 500 city+state combos by company count
+- All other combos: export const dynamic = 'force-static' and 
+  export const revalidate = 86400 at top of file
+- This prevents Vercel build timeouts from generating 100,000+ pages
+
+app/commercial-cleaning/[state]/page.tsx:
+generateStaticParams: query distinct states from companies.
+Page: H1 "Commercial Cleaning Companies in [Full State Name]"
+Description paragraph with count. Top cities as clickable filter chips.
+Company card grid filtered by state. Same selection + sticky bar as search.
+Meta title: "Commercial Cleaning Companies in [State] | CCNearMe"
+Meta description with count.
+
+app/commercial-cleaning/[city_state]/page.tsx:
+Param format: "austin-tx". Parse city and state from it.
+H1: "Commercial Cleaning Companies in [City], [State]"
+Company cards filtered to city+state.
+Related cities: other cities in same state as tag links.
+
+app/commercial-cleaning-near-me/[city_state]/page.tsx:
+Same as above but H1: "Commercial Cleaning Near [City], [State]"
+Targets "near me" search intent.
+
+app/[service_cleaning]/[city_state]/page.tsx:
+Param: service_cleaning format is "office-cleaning", city_state is "austin-tx"
+Only generate for combos where companies exist.
+Title: "[Service] Cleaning Services in [City], [State] — [Count] Companies"
+
+app/[service_cleaning]/[state]/page.tsx:
+State-level service pages.
+
+All pSEO pages:
+- Reuse CompanyCard component
+- Include 3-company selection + sticky bar (extract as shared hook)
+- BreadcrumbList JSON-LD schema
+- Internal links to related cities and related services
+- Add quote request section matching search page
+
+--- app/sitemap.xml/route.ts ---
+
+GET handler returning XML sitemap.
+Include:
+- All company profile URLs (/company/[slug])
+- All 50 state pages (/commercial-cleaning/[state])
+- All city pages for top 1000 cities (/commercial-cleaning/[city-state])
+- All near-me pages for top 1000 cities
+- Static pages: /, /search, /claim, /login
+
+--- app/robots.txt/route.ts ---
+
+GET handler. Return:
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /dashboard
+Sitemap: https://commercialcleaningnearme.com/sitemap.xml
+
+--- vercel.json ---
+
+{
+  "crons": [
+    {
+      "path": "/api/cron/sequences",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/reset-leads", 
+      "schedule": "0 0 1 * *"
+    }
+  ]
+}
+
+--- lib/stripe.ts ---
+
+import Stripe from 'stripe'
+export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: '2023-10-16'
+})
+
+--- lib/resend.ts ---
+
+import { Resend } from 'resend'
+export const resend = new Resend(process.env.RESEND_API_KEY)
+
+export async function sendEmail(to: string, subject: string, html: string) {
+  try {
+    await resend.emails.send({
+      from: 'CommercialCleaningNearMe.com <leads@commercialcleaningnearme.com>',
+      to,
+      subject,
+      html
+    })
+  } catch (error) {
+    console.error('Email send failed:', error)
+  }
+}
+
+--- lib/utils.ts ---
+
+Helper functions:
+- generateSlug(name, city): lowercase, hyphens, strip special chars
+- formatPhone(phone): format as (XXX) XXX-XXXX
+- formatDate(date): format as "Month DD, YYYY"
+- getRelativeTime(date): "2 hours ago", "3 days ago" etc
+- getInitials(name): first letters of first 2 words
+- US_STATES: exported array of { code, name } for all 50 states
+- SERVICE_TYPES: exported array of all service type strings
+- FULL_STATE_NAMES: exported map of state code to full name
+
+--- COMPONENTS TO CREATE ---
+
+components/Header.tsx:
+Client component. Logo left, nav right, mobile hamburger.
+Mobile: slide-out drawer with all nav links.
+Highlight active nav item based on current path.
+
+components/StarRating.tsx:
+Props: rating (float), size (sm/md/lg), showNumber (boolean).
+Render filled/half/empty amber stars. Optionally show numeric rating.
+
+components/Skeleton.tsx:
+CompanyCardSkeleton: matches card dimensions with gray animated shimmer.
+ProfileSkeleton: header + sections with shimmer blocks.
+Use CSS animation for shimmer effect.
+
+components/SelectionBar.tsx:
+Fixed bottom bar. Accepts selectedCount and onRequestQuotes callback.
+Shows "[X] companies selected — $35 each to unlock" and 
+"Request Quotes →" navy button.
+Slides up from bottom when selectedCount > 0, slides down when 0.
+
+--- PACKAGES TO INSTALL ---
+
+@supabase/supabase-js
+stripe
+@stripe/stripe-js
+resend
+recharts
+crypto (built-in Node.js)
+
+--- FINAL NOTES ---
+
+1. All Supabase queries use supabaseAdmin (service role) in API routes and 
+   server components. Use supabase (anon) in client components.
+
+2. All API routes that modify data should verify the user is authenticated 
+   unless explicitly noted (webhook routes verify Stripe signature instead).
+
+3. The stripe_payment_id unique constraint on lead_purchases is the 
+   idempotency mechanism — if a Stripe webhook fires twice for the same 
+   payment, the second upsert silently does nothing.
+
+4. The email_sequences unique constraint (company_id, sequence_name) 
+   prevents any company from receiving the same automated email twice, 
+   regardless of how many times the cron runs.
+
+5. For the admin rate limiter, use a module-level Map — in-memory is fine 
+   since this is a single-server admin route.
+
+6. Places API photos must ALWAYS write to Supabase before rendering. 
+   Never fire-and-forget. Never re-fetch if image_urls is already populated.
+
+7. Make the site look genuinely professional. Navy #1B3A6B and blue #2563EB 
+   throughout. Proper spacing, shadows, hover states on all interactive 
+   elements. The design should feel like a trusted B2B product, not a 
+   side project.
+
+Build every file completely. No placeholders. No TODOs. 
+Working code in every file.
