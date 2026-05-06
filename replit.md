@@ -1,45 +1,60 @@
-# [Project name]
+# CommercialCleaningNearMe.com
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A commercial cleaning lead generation directory where facility managers find and compare cleaning companies, request free quotes, and companies pay to unlock contact details or subscribe.
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Next.js app: runs via workflow `artifacts/web-nextjs: web` (port 18831)
+- API server: runs via workflow `artifacts/api-server: API Server` (port 8080)
+- Required env in `artifacts/web-nextjs/.env.local`:
+  - `NEXT_PUBLIC_SUPABASE_URL` — Supabase project URL
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key
+  - `SUPABASE_SERVICE_ROLE_KEY` — Supabase service role key
+  - `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+  - `STRIPE_STARTER_PRICE_ID`, `STRIPE_GROWTH_PRICE_ID`, `STRIPE_UNLIMITED_PRICE_ID`
+  - `RESEND_API_KEY` — for email sequences
+  - `ADMIN_PASSWORD` — admin dashboard login
+  - `NEXT_PUBLIC_SITE_URL=https://commercialcleaningnearme.com`
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
-- API: Express 5
-- DB: PostgreSQL + Drizzle ORM
-- Validation: Zod (`zod/v4`), `drizzle-zod`
-- API codegen: Orval (from OpenAPI spec)
-- Build: esbuild (CJS bundle)
+- Next.js 14 (App Router), TypeScript, Tailwind CSS v3
+- Supabase (PostgreSQL + auth), Stripe (payments), Resend (email)
+- pnpm workspaces, Node.js 24
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- Main app: `artifacts/web-nextjs/`
+- App routes: `artifacts/web-nextjs/app/`
+- Components: `artifacts/web-nextjs/components/`
+- Lib (supabase, stripe, resend, utils): `artifacts/web-nextjs/lib/`
+- DB schema: `artifacts/web-nextjs/supabase/schema.sql`
+- CSV import script: `artifacts/web-nextjs/scripts/import.ts`
+- Env vars: `artifacts/web-nextjs/.env.local`
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- pSEO routes use `[location]` (not separate `[state]`/`[city_state]`) to avoid Next.js dynamic slug conflicts; city vs state is detected at runtime
+- `[service]` routes moved under `/service/[service]/[location]/` to avoid intercepting Next.js `_next/static` asset paths
+- Supabase client uses safe fallback (no crash on missing env vars) — app renders without DB, DB calls return empty arrays
+- Stripe unlock model: $35 one-time per lead OR $99/$199/$399/mo subscription tiers
+- Admin dashboard at `/admin` protected by `ADMIN_PASSWORD` env var cookie
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
-
-## User preferences
-
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- **Facility managers**: search directory, select up to 3 companies, submit free quote request
+- **Cleaning companies**: claim free listing, pay $35/lead to unlock contact info, or subscribe monthly
+- **pSEO**: thousands of city/state/service landing pages for organic SEO traffic
+- **Admin**: company management, lead tracking, revenue analytics, email intelligence
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- After any route structure change, delete `artifacts/web-nextjs/.next/` and restart workflow
+- `[service]` dynamic root routes intercept `_next/static` paths — keep service routes under `/service/` prefix
+- Supabase `createClient` throws on invalid URL at import time — use the safe wrapper in `lib/supabase.ts`
+- CSS served via Next.js internal handler in dev mode (no static file at `_next/static/css/app/layout.css`)
 
 ## Pointers
 
-- See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- Supabase schema: `artifacts/web-nextjs/supabase/schema.sql`
+- See `pnpm-workspace` skill for monorepo structure

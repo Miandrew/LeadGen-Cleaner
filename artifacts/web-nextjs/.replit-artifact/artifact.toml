@@ -1,0 +1,25 @@
+kind = "web"
+previewPath = "/"
+title = "CommercialCleaningNearMe.com"
+version = "1.0.0"
+id = "artifacts/web-nextjs"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18831
+
+[services.development]
+run = "pnpm --filter @workspace/web-nextjs run dev"
+
+[services.production]
+run = "pnpm --filter @workspace/web-nextjs run start"
+build = [ "pnpm", "--filter", "@workspace/web-nextjs", "run", "build" ]
+
+[services.env]
+PORT = "18831"

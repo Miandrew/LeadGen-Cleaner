@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "CommercialCleaningNearMe.com"
+version = "1.0.0"
+id = "web-nextjs-ccnm"
+
+[[services]]
+localPort = 3000
+name = "Next.js App"
+paths = ["/"]
+
+[services.development]
+run = "pnpm --filter @workspace/web run dev"
+
+[services.development.env]
+PORT = "3000"
+
+[services.production]
+
+[services.production.build]
+args = ["pnpm", "--filter", "@workspace/web", "run", "build"]
+
+[services.production.build.env]
+NODE_ENV = "production"
+
+[services.production.run]
+args = ["pnpm", "--filter", "@workspace/web", "run", "start"]
+
+[services.production.run.env]
+PORT = "3000"
+NODE_ENV = "production"
