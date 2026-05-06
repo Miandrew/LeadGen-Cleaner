@@ -14,4 +14,15 @@ function createSafeClient(url: string, key: string): SupabaseClient | null {
 }
 
 export const supabase: SupabaseClient = createSafeClient(SUPABASE_URL, SUPABASE_ANON_KEY) as SupabaseClient
-export const supabaseAdmin: SupabaseClient = (createSafeClient(SUPABASE_URL, SUPABASE_SERVICE_KEY) ?? createSafeClient(SUPABASE_URL, SUPABASE_ANON_KEY)) as SupabaseClient
+export const supabaseAdmin: SupabaseClient = (
+  createSafeClient(SUPABASE_URL, SUPABASE_SERVICE_KEY) ??
+  createSafeClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+) as SupabaseClient
+
+export function createSupabaseServerClient(cookieGetter: (name: string) => string | undefined): SupabaseClient | null {
+  if (!isSupabaseConfigured()) return null
+  const { createServerClient } = require('@supabase/ssr') as typeof import('@supabase/ssr')
+  return createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    cookies: { get: cookieGetter },
+  })
+}

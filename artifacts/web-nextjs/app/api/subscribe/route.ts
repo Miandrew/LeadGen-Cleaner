@@ -1,20 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { stripe } from '@/lib/stripe'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase'
 import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
 
 export async function POST(req: NextRequest) {
   try {
+    if (!isSupabaseConfigured()) {
+      return NextResponse.json({ error: 'Service not configured' }, { status: 503 })
+    }
+
     const { plan_id, tier } = await req.json()
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
 
     const cookieStore = cookies()
-    const supabaseAuth = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { get: (name: string) => cookieStore.get(name)?.value } }
-    )
+    const supabaseAuth = createSupabaseServerClient((name) => cookieStore.get(name)?.value)
+    if (!supabaseAuth) return NextResponse.json({ error: 'Service not configured' }, { status: 503 })
+
     const { data: { session } } = await supabaseAuth.auth.getSession()
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

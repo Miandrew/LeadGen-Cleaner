@@ -1,24 +1,20 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import { createServerClient } from '@supabase/ssr'
-import { supabaseAdmin } from '@/lib/supabase'
+import { createSupabaseServerClient, supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase'
 import Header from '@/components/Header'
 import { getRelativeTime } from '@/lib/utils'
 
 async function getSession() {
+  if (!isSupabaseConfigured()) return null
   const cookieStore = cookies()
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { get: (name: string) => cookieStore.get(name)?.value } }
-  )
+  const supabase = createSupabaseServerClient((name) => cookieStore.get(name)?.value)
+  if (!supabase) return null
   const { data: { session } } = await supabase.auth.getSession()
   return session
 }
 
 function profileCompletion(company: Record<string, unknown>) {
-  const fields = ['logo_url', 'description', 'phone', 'website', 'certifications'] as const
   let score = 0
   if (company.logo_url) score += 20
   if (company.description) score += 20
@@ -37,6 +33,21 @@ function profileCompletion(company: Record<string, unknown>) {
 }
 
 export default async function DashboardPage() {
+  if (!isSupabaseConfigured()) {
+    return (
+      <div className="min-h-screen flex flex-col bg-gray-50">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <div className="text-center p-8">
+            <h1 className="text-2xl font-bold text-navy mb-3">Dashboard</h1>
+            <p className="text-gray-500">Supabase credentials are required to access the dashboard.</p>
+            <p className="text-sm text-gray-400 mt-2">Set NEXT_PUBLIC_SUPABASE_URL and related env vars in .env.local</p>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
   const session = await getSession()
   if (!session) redirect('/login')
 
@@ -77,7 +88,6 @@ export default async function DashboardPage() {
     <div className="min-h-screen flex flex-col bg-gray-50">
       <Header />
       <div className="flex flex-1">
-        {/* Sidebar */}
         <aside className="hidden md:flex flex-col w-52 bg-white border-r border-gray-200 py-6 px-4 gap-1 flex-shrink-0">
           {[
             { href: '/dashboard', label: 'Overview' },
@@ -99,7 +109,6 @@ export default async function DashboardPage() {
         <main className="flex-1 p-6 max-w-4xl">
           <h1 className="text-2xl font-bold text-navy mb-6">Welcome back, {firstName}</h1>
 
-          {/* Profile completion */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
             <div className="flex items-center justify-between mb-2">
               <h2 className="font-semibold text-gray-900">Profile Completion</h2>
@@ -122,7 +131,6 @@ export default async function DashboardPage() {
             )}
           </div>
 
-          {/* Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             {[
               { label: 'Leads Available', value: availableLeads ?? 0, sub: 'in your area (72h)' },
@@ -137,7 +145,6 @@ export default async function DashboardPage() {
             ))}
           </div>
 
-          {/* Recent purchases */}
           {recentPurchases && recentPurchases.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
               <h2 className="font-semibold text-gray-900 mb-4">Recent Purchases</h2>
@@ -155,7 +162,6 @@ export default async function DashboardPage() {
             </div>
           )}
 
-          {/* Quick actions */}
           <div className="flex gap-3">
             <Link href="/dashboard/leads" className="bg-navy text-white font-semibold px-5 py-2.5 rounded-lg text-sm hover:bg-navy/90 transition-colors">
               View Available Leads
