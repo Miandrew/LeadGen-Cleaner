@@ -37,6 +37,7 @@ export default function DashboardLeadsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (!supabase) { router.push('/login'); return }
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { router.push('/login'); return }
       const { data: user } = await supabase.from('users').select('company_id, companies(id, city, state)').eq('email', session.user.email!).single()

@@ -1537,6 +1537,11 @@ video {
   background-color: rgb(22 47 86 / var(--tw-bg-opacity, 1));
 }
 
+.hover\:bg-accent-600:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(29 78 216 / var(--tw-bg-opacity, 1));
+}
+
 .hover\:bg-accent\/90:hover {
   background-color: rgb(37 99 235 / 0.9);
 }
@@ -1566,6 +1571,11 @@ video {
   background-color: rgb(249 250 251 / var(--tw-bg-opacity, 1));
 }
 
+.hover\:bg-navy-600:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(22 47 86 / var(--tw-bg-opacity, 1));
+}
+
 .hover\:bg-navy\/90:hover {
   background-color: rgb(27 58 107 / 0.9);
 }
@@ -1578,16 +1588,6 @@ video {
 .hover\:bg-red-50:hover {
   --tw-bg-opacity: 1;
   background-color: rgb(254 242 242 / var(--tw-bg-opacity, 1));
-}
-
-.hover\:bg-accent-600:hover {
-  --tw-bg-opacity: 1;
-  background-color: rgb(29 78 216 / var(--tw-bg-opacity, 1));
-}
-
-.hover\:bg-navy-600:hover {
-  --tw-bg-opacity: 1;
-  background-color: rgb(22 47 86 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:text-accent:hover {

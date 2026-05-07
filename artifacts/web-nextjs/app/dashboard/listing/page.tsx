@@ -37,9 +37,10 @@ export default function DashboardListingPage() {
   const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
+    if (!supabase) { router.push('/login'); return }
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { router.push('/login'); return }
-      const { data: user } = await supabase.from('users').select('company_id').eq('email', session.user.email!).single()
+      const { data: user } = await supabase!.from('users').select('company_id').eq('email', session.user.email!).single()
       if (!user?.company_id) return
       const { data } = await supabase.from('companies').select('*').eq('id', user.company_id).single()
       if (data) { setCompany(data); setForm(data) }

@@ -50,9 +50,10 @@ export default function SubscriptionPage() {
   const [loading, setLoading] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!supabase) { router.push('/login'); return }
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) { router.push('/login'); return }
-      const { data } = await supabase.from('users').select('subscription_status, subscription_tier, company_id').eq('email', session.user.email!).single()
+      const { data } = await supabase!.from('users').select('subscription_status, subscription_tier, company_id').eq('email', session.user.email!).single()
       if (data) setUserData(data)
     })
   }, [router])
