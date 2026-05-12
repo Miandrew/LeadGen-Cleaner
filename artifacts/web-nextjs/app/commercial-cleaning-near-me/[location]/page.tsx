@@ -1,12 +1,11 @@
-export const dynamic = 'force-static'
-export const revalidate = 86400
+export const dynamic = 'force-dynamic'
 
 import type { Metadata } from 'next'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import PseoCompanyGrid from '@/components/PseoCompanyGrid'
-import { supabaseAdmin } from '@/lib/supabase'
-import { FULL_STATE_NAMES } from '@/lib/utils'
+import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase'
+import { US_STATES, FULL_STATE_NAMES } from '@/lib/utils'
 
 interface Props {
   params: { location: string }
@@ -20,40 +19,22 @@ function parseCityState(location: string): { city: string; state: string } {
 }
 
 export async function generateStaticParams() {
-  const { data } = await supabaseAdmin
-    .from('companies')
-    .select('city, state')
-    .eq('active', true)
-    .limit(5000)
-
-  const combos = new Map<string, number>()
-  ;(data || []).forEach((c: { city: string; state: string }) => {
-    if (c.city && c.state) {
-      const key = `${c.city}-${c.state}`
-      combos.set(key, (combos.get(key) || 0) + 1)
-    }
-  })
-
-  return [...combos.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 500)
-    .map(([key]) => {
-      const [city, state] = key.split('-')
-      return { location: `${city.toLowerCase().replace(/\s+/g, '-')}-${state.toLowerCase()}` }
-    })
+  return US_STATES.slice(0, 20).map((s) => ({
+    location: `${s.name.toLowerCase().replace(/\s+/g, '-')}-${s.code.toLowerCase()}`,
+  }))
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { city, state } = parseCityState(params.location)
   const stateName = FULL_STATE_NAMES[state] || state
-  const { count } = await supabaseAdmin
-    .from('companies')
-    .select('*', { count: 'exact', head: true })
-    .ilike('city', city)
-    .eq('state', state)
+  let count = 0
+  if (isSupabaseConfigured() && supabaseAdmin) {
+    const res = await supabaseAdmin.from('companies').select('*', { count: 'exact', head: true }).ilike('city', city).eq('state', state)
+    count = res.count || 0
+  }
   return {
     title: `Commercial Cleaning Near Me in ${city}, ${stateName} | CCNearMe`,
-    description: `Find ${count || 0} commercial cleaning companies near you in ${city}, ${stateName}. Get free quotes from local, verified cleaning services.`,
+    description: `Find ${count || 'top'} commercial cleaning companies near you in ${city}, ${stateName}. Get free quotes from local, verified cleaning services.`,
   }
 }
 
@@ -61,14 +42,14 @@ export default async function NearMeCityPage({ params }: Props) {
   const { city, state } = parseCityState(params.location)
   const stateName = FULL_STATE_NAMES[state] || state
 
-  const { data: companies, count } = await supabaseAdmin
-    .from('companies')
-    .select('*')
-    .ilike('city', city)
-    .eq('state', state)
-    .eq('active', true)
-    .order('rating', { ascending: false })
-    .limit(20)
+  let companies: unknown[] = []
+  let count = 0
+
+  if (isSupabaseConfigured() && supabaseAdmin) {
+    const res = await supabaseAdmin.from('companies').select('*').ilike('city', city).eq('state', state).eq('active', true).order('rating', { ascending: false }).limit(20)
+    companies = res.data || []
+    count = res.count || 0
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -80,11 +61,11 @@ export default async function NearMeCityPage({ params }: Props) {
               <a href="/" className="hover:text-accent">Home</a> / Commercial Cleaning Near Me / {city}, {stateName}
             </nav>
             <h1 className="text-3xl font-bold text-navy mb-3">Commercial Cleaning Near Me in {city}, {stateName}</h1>
-            <p className="text-gray-500">{count?.toLocaleString() || 0} local commercial cleaning companies. Compare services and request free quotes.</p>
+            <p className="text-gray-500">{count > 0 ? `${count.toLocaleString()} local commercial cleaning companies.` : 'Commercial cleaning companies serving this area.'} Compare services and request free quotes.</p>
           </div>
         </div>
         <div className="max-w-5xl mx-auto px-4 py-8">
-          <PseoCompanyGrid companies={companies || []} />
+          <PseoCompanyGrid companies={companies as Parameters<typeof PseoCompanyGrid>[0]['companies']} />
         </div>
       </main>
       <Footer />

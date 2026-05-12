@@ -5,7 +5,7 @@ import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import CompanyLogo from '@/components/CompanyLogo'
 import StarRating from '@/components/StarRating'
-import { supabaseAdmin } from '@/lib/supabase'
+import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase'
 import { formatDate, formatPhone, FULL_STATE_NAMES } from '@/lib/utils'
 
 interface Props {
@@ -13,27 +13,20 @@ interface Props {
 }
 
 async function getCompany(slug: string) {
-  const { data } = await supabaseAdmin
-    .from('companies')
-    .select('*')
-    .eq('slug', slug)
-    .single()
+  if (!isSupabaseConfigured() || !supabaseAdmin) return null
+  const { data } = await supabaseAdmin.from('companies').select('*').eq('slug', slug).single()
   return data
 }
 
 async function getReviews(companyId: string) {
-  const { data } = await supabaseAdmin
-    .from('reviews')
-    .select('*')
-    .eq('company_id', companyId)
-    .order('created_at', { ascending: false })
+  if (!isSupabaseConfigured() || !supabaseAdmin) return []
+  const { data } = await supabaseAdmin.from('reviews').select('*').eq('company_id', companyId).order('created_at', { ascending: false })
   return data || []
 }
 
 async function fetchAndStorePlacesPhotos(company: { id: string; place_id: string; name: string }) {
   const apiKey = process.env.GOOGLE_PLACES_API_KEY
-  if (!apiKey) return []
-  console.log(`Fetching Places photos for: ${company.name}`)
+  if (!apiKey || !isSupabaseConfigured() || !supabaseAdmin) return []
   try {
     const res = await fetch(
       `https://maps.googleapis.com/maps/api/place/details/json?place_id=${company.place_id}&fields=photos&key=${apiKey}`
@@ -96,10 +89,7 @@ export default async function CompanyPage({ params }: Props) {
     <div className="min-h-screen flex flex-col">
       <Header />
       <main className="flex-1 bg-gray-50">
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-        />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
           {/* Header card */}
@@ -179,61 +169,36 @@ export default async function CompanyPage({ params }: Props) {
             </div>
           </div>
 
-          {/* Photos */}
           {images.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
               <h2 className="text-lg font-bold text-navy mb-4">Photos</h2>
               <div className="grid grid-cols-3 gap-2">
                 {images.slice(0, 5).map((url, i) => (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    key={url}
-                    src={url}
-                    alt={`${company.name} photo ${i + 1}`}
-                    className={`rounded-lg object-cover w-full ${i === 0 ? 'col-span-2 row-span-2 h-48' : 'h-[90px]'}`}
-                  />
+                  <img key={url} src={url} alt={`${company.name} photo ${i + 1}`} className={`rounded-lg object-cover w-full ${i === 0 ? 'col-span-2 row-span-2 h-48' : 'h-[90px]'}`} />
                 ))}
               </div>
             </div>
           )}
 
-          {/* About */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
             <h2 className="text-lg font-bold text-navy mb-4">About</h2>
             <div className="space-y-3 text-sm text-gray-600">
               {company.description && <p>{company.description}</p>}
-              {company.years_in_business && (
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-gray-900">Years in Business:</span> {company.years_in_business}
-                </div>
-              )}
-              {company.employee_count && (
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-gray-900">Team Size:</span> {company.employee_count}
-                </div>
-              )}
-              {company.address && (
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-gray-900">Address:</span> {company.address}
-                </div>
-              )}
+              {company.years_in_business && <div className="flex items-center gap-2"><span className="font-medium text-gray-900">Years in Business:</span> {company.years_in_business}</div>}
+              {company.employee_count && <div className="flex items-center gap-2"><span className="font-medium text-gray-900">Team Size:</span> {company.employee_count}</div>}
+              {company.address && <div className="flex items-center gap-2"><span className="font-medium text-gray-900">Address:</span> {company.address}</div>}
             </div>
           </div>
 
-          {/* Quote CTA */}
           <div className="bg-accent rounded-xl p-6 text-white">
             <h2 className="text-lg font-bold mb-1">Request a Free Quote from {company.name}</h2>
             <p className="text-blue-100 text-sm mb-4">Get a response within 24 hours.</p>
-            <Link
-              href={`/quote?companies=${company.id}`}
-              onClick={() => window.scrollTo(0, 0)}
-              className="inline-block bg-white text-accent font-semibold px-5 py-2.5 rounded-lg text-sm hover:bg-blue-50 transition-colors"
-            >
+            <Link href={`/quote?companies=${company.id}`} className="inline-block bg-white text-accent font-semibold px-5 py-2.5 rounded-lg text-sm hover:bg-blue-50 transition-colors">
               Request Quote
             </Link>
           </div>
 
-          {/* Map */}
           {company.address && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
               <h2 className="text-lg font-bold text-navy mb-4">Location</h2>
@@ -249,7 +214,6 @@ export default async function CompanyPage({ params }: Props) {
             </div>
           )}
 
-          {/* Reviews */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
             <h2 className="text-lg font-bold text-navy mb-4">
               Reviews {company.review_count > 0 && `(${company.review_count})`}
