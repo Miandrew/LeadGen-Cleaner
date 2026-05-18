@@ -1,7 +1,3 @@
 {
-  "/page": "app/page.js",
-  "/service/[service]/[location]/page": "app/service/[service]/[location]/page.js",
-  "/commercial-cleaning/[location]/page": "app/commercial-cleaning/[location]/page.js",
-  "/for-cleaning-companies/page": "app/for-cleaning-companies/page.js",
-  "/quote/page": "app/quote/page.js"
+  "/page": "app/page.js"
 }
