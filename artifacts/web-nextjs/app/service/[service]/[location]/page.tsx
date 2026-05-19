@@ -112,7 +112,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const stateName = code ? FULL_STATE_NAMES[code] : params.location.replace(/-/g, ' ')
     let count = 0
     if (isSupabaseConfigured() && supabaseAdmin && serviceKey) {
-      const res = await supabaseAdmin.from('companies').select('*', { count: 'exact', head: true }).eq('state', code || params.location.toUpperCase()).contains('services', [serviceKey])
+      const res = await supabaseAdmin.from('companies').select('*', { count: 'exact', head: true }).eq('state', code || params.location.toUpperCase()).contains('services', [serviceKey]).eq('active', true)
       count = res.count || 0
     }
     return {
@@ -124,7 +124,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const stateName = FULL_STATE_NAMES[state] || state
     let count = 0
     if (isSupabaseConfigured() && supabaseAdmin && serviceKey) {
-      const res = await supabaseAdmin.from('companies').select('*', { count: 'exact', head: true }).ilike('city', city).eq('state', state).contains('services', [serviceKey])
+      const res = await supabaseAdmin.from('companies').select('*', { count: 'exact', head: true }).ilike('city', city).eq('state', state).contains('services', [serviceKey]).eq('active', true)
       count = res.count || 0
     }
     return {
@@ -146,11 +146,37 @@ export default async function ServiceLocationPage({ params }: Props) {
 
     let companies: unknown[] = []
     let count = 0
+    let cityRows: { city: string; count: number }[] = []
 
     if (isSupabaseConfigured() && supabaseAdmin && serviceKey) {
-      const res = await supabaseAdmin.from('companies').select('*', { count: 'exact' }).eq('state', code || params.location.toUpperCase()).contains('services', [serviceKey]).eq('active', true).order('rating', { ascending: false }).limit(20)
+      const stateCode = code || params.location.toUpperCase()
+      const res = await supabaseAdmin.from('companies').select('*', { count: 'exact' }).eq('state', stateCode).contains('services', [serviceKey]).eq('active', true).order('rating', { ascending: false }).limit(20)
       companies = res.data || []
       count = res.count || 0
+
+      const counts = new Map<string, { city: string; count: number }>()
+      const pageSize = 1000
+      let from = 0
+      for (let i = 0; i < 50; i++) {
+        const { data, error } = await supabaseAdmin
+          .from('companies')
+          .select('city')
+          .eq('state', stateCode)
+          .contains('services', [serviceKey])
+          .eq('active', true)
+          .range(from, from + pageSize - 1)
+        if (error || !data || data.length === 0) break
+        for (const r of data as { city: string | null }[]) {
+          if (!r.city) continue
+          const key = r.city.toLowerCase()
+          const existing = counts.get(key)
+          if (existing) existing.count++
+          else counts.set(key, { city: r.city, count: 1 })
+        }
+        if (data.length < pageSize) break
+        from += pageSize
+      }
+      cityRows = [...counts.values()].sort((a, b) => b.count - a.count)
     }
 
     return (
@@ -166,10 +192,35 @@ export default async function ServiceLocationPage({ params }: Props) {
                 <span>{stateName}</span>
               </nav>
               <h1 className="text-3xl font-bold text-navy mb-3 capitalize">{displayService} Companies in {stateName}</h1>
-              <p className="text-gray-500">{count > 0 ? `${count.toLocaleString()} ${displayService} companies across ${stateName}.` : `${displayService} companies serving ${stateName}.`}</p>
+              <p className="text-gray-500">{count > 0 ? `${count.toLocaleString()} ${displayService} companies across ${stateName} in ${cityRows.length} cities.` : `${displayService} companies serving ${stateName}.`}</p>
             </div>
           </div>
           <div className="max-w-5xl mx-auto px-4 py-8">
+            {cityRows.length > 0 && code && (
+              <div className="mb-8 bg-white border border-gray-200 rounded-xl p-6">
+                <h2 className="text-lg font-bold text-navy mb-1">
+                  {displayService} by City in {stateName}
+                </h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  Pick a city to see {displayService.toLowerCase()} companies serving that area.
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                  {cityRows.map((c) => {
+                    const slug = `${c.city.toLowerCase().replace(/\s+/g, '-')}-${code.toLowerCase()}`
+                    return (
+                      <Link
+                        key={c.city}
+                        href={`/service/${serviceKey}/${slug}`}
+                        className="bg-gray-50 hover:bg-blue-50 hover:text-accent border border-gray-200 rounded-lg px-3 py-2 transition-colors flex items-center justify-between gap-2"
+                      >
+                        <span className="text-sm text-gray-700 truncate">{c.city}</span>
+                        <span className="text-xs text-gray-400 flex-shrink-0">{c.count}</span>
+                      </Link>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
             <PseoCompanyGrid companies={companies as Parameters<typeof PseoCompanyGrid>[0]['companies']} />
             {serviceKey && code && (
               <InternalLinks

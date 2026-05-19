@@ -42,20 +42,34 @@ export default async function ServiceHubPage({ params }: Props) {
   if (!service) notFound()
 
   let stateCounts = new Map<string, number>()
+  const cityCounts = new Map<string, { city: string; state: string; count: number }>()
   let totalCount = 0
 
   if (isSupabaseConfigured() && supabaseAdmin) {
-    const { data } = await supabaseAdmin
-      .from('companies')
-      .select('state')
-      .contains('services', [service.value])
-      .eq('active', true)
-      .limit(10000)
-    for (const row of (data || []) as { state: string | null }[]) {
-      if (!row.state) continue
-      const code = row.state.toUpperCase()
-      stateCounts.set(code, (stateCounts.get(code) || 0) + 1)
-      totalCount++
+    const pageSize = 1000
+    let from = 0
+    for (let i = 0; i < 200; i++) {
+      const { data, error } = await supabaseAdmin
+        .from('companies')
+        .select('state,city')
+        .contains('services', [service.value])
+        .eq('active', true)
+        .range(from, from + pageSize - 1)
+      if (error || !data || data.length === 0) break
+      for (const row of data as { state: string | null; city: string | null }[]) {
+        if (!row.state) continue
+        const code = row.state.toUpperCase()
+        stateCounts.set(code, (stateCounts.get(code) || 0) + 1)
+        totalCount++
+        if (row.city) {
+          const key = `${row.city.toLowerCase()}|${code}`
+          const existing = cityCounts.get(key)
+          if (existing) existing.count++
+          else cityCounts.set(key, { city: row.city, state: code, count: 1 })
+        }
+      }
+      if (data.length < pageSize) break
+      from += pageSize
     }
   }
 
@@ -63,6 +77,10 @@ export default async function ServiceHubPage({ params }: Props) {
     .map((s) => ({ ...s, count: stateCounts.get(s.code) || 0 }))
     .filter((s) => s.count > 0)
     .sort((a, b) => b.count - a.count)
+
+  const topCities = [...cityCounts.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 30)
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -101,6 +119,32 @@ export default async function ServiceHubPage({ params }: Props) {
                   <div className="text-xs text-gray-500 mt-1">{s.count.toLocaleString()} companies</div>
                 </Link>
               ))}
+            </div>
+          )}
+
+          {topCities.length > 0 && (
+            <div className="mt-12">
+              <h2 className="text-lg font-bold text-navy mb-1">Top Cities for {service.label}</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                The biggest metros offering {service.label.toLowerCase()} services.
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                {topCities.map((c) => {
+                  const slug = `${c.city.toLowerCase().replace(/\s+/g, '-')}-${c.state.toLowerCase()}`
+                  return (
+                    <Link
+                      key={`${c.city}-${c.state}`}
+                      href={`/service/${service.value}/${slug}`}
+                      className="bg-white border border-gray-200 rounded-lg px-3 py-2 hover:border-accent hover:text-accent transition-colors flex items-center justify-between gap-2"
+                    >
+                      <span className="text-sm text-gray-700 truncate">
+                        {c.city}, {c.state}
+                      </span>
+                      <span className="text-xs text-gray-400 flex-shrink-0">{c.count}</span>
+                    </Link>
+                  )
+                })}
+              </div>
             </div>
           )}
 
