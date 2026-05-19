@@ -34,6 +34,21 @@ const CSV_FILE = path.resolve(
 const BATCH_SIZE = 50
 const BATCH_DELAY_MS = 100
 
+// ─── Slug generator (collision-proof via place_id suffix) ─────────────────────
+
+function generateSlug(name: string, city: string | null, state: string | null, placeId: string | null): string {
+  const base = [name, city, state]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '')
+    .replace(/\s+/g, '-')
+    .slice(0, 60)
+  // Append last 6 chars of place_id for guaranteed uniqueness
+  const suffix = placeId ? placeId.slice(-6).toLowerCase() : Math.random().toString(36).slice(2, 8)
+  return `${base}-${suffix}`.replace(/-+/g, '-').replace(/^-|-$/g, '')
+}
+
 // ─── Cleaning helpers ────────────────────────────────────────────────────────
 
 const NULL_STRINGS = new Set(['', 'nan', 'NaN', 'None', 'null', 'undefined'])
@@ -222,11 +237,15 @@ function mapRow(row: CsvRow): CompanyInsert | null {
   if (!name) return null
   if (clean(row.business_status) !== 'OPERATIONAL') return null
 
+  const placeId = clean(row.place_id)
+  const city = clean(row.city)
+  const state = clean(row.state)
+
   return {
     name,
     name_for_emails:      clean(row.name_for_emails),
-    slug:                 clean(row.slug),
-    place_id:             clean(row.place_id),
+    slug:                 generateSlug(name, city, state, placeId),
+    place_id:             placeId,
     reviews_id:           clean(row.reviews_id),
     address:              clean(row.address),
     street:               clean(row.street),
