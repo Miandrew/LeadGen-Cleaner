@@ -47,28 +47,40 @@ function SearchContent() {
   const [filterRating, setFilterRating] = useState(ratingParam)
   const [filterVerified, setFilterVerified] = useState(verified)
 
+  const [fallbackToState, setFallbackToState] = useState(false)
+
+  const buildQuery = useCallback((withCity: boolean) => {
+    let q = supabase.from('companies').select('*', { count: 'exact' }).eq('active', true)
+    if (withCity && city) q = q.ilike('city', `%${city}%`)
+    if (state) q = q.eq('state', state)
+    if (service) q = q.contains('services', [service])
+    if (parseFloat(ratingParam) > 1) q = q.gte('rating', parseFloat(ratingParam))
+    if (verified) q = q.eq('claimed', true)
+    if (sort === 'rating') q = q.order('rating', { ascending: false, nullsFirst: false })
+    else if (sort === 'reviews') q = q.order('review_count', { ascending: false, nullsFirst: false })
+    else if (sort === 'newest') q = q.order('created_at', { ascending: false })
+    return q
+  }, [city, state, service, ratingParam, verified, sort])
+
   const fetchCompanies = useCallback(async () => {
     setLoading(true)
-    let query = supabase.from('companies').select('*', { count: 'exact' }).eq('active', true)
-
-    if (city) query = query.ilike('city', `%${city}%`)
-    if (state) query = query.eq('state', state)
-    if (service) query = query.contains('services', [service])
-    if (parseFloat(ratingParam) > 1) query = query.gte('rating', parseFloat(ratingParam))
-    if (verified) query = query.eq('claimed', true)
-
-    if (sort === 'rating') query = query.order('rating', { ascending: false, nullsFirst: false })
-    else if (sort === 'reviews') query = query.order('review_count', { ascending: false, nullsFirst: false })
-    else if (sort === 'newest') query = query.order('created_at', { ascending: false })
+    setFallbackToState(false)
 
     const from = (page - 1) * 20
-    query = query.range(from, from + 19)
+    let { data, count } = await buildQuery(true).range(from, from + 19)
 
-    const { data, count } = await query
+    // If city returned 0 and we have a state, fall back to state-wide results
+    if (city && (count === 0 || !data?.length) && state) {
+      const fb = await buildQuery(false).range(from, from + 19)
+      data = fb.data
+      count = fb.count
+      setFallbackToState(true)
+    }
+
     setCompanies(data || [])
     setTotal(count || 0)
     setLoading(false)
-  }, [city, state, service, ratingParam, verified, sort, page])
+  }, [city, state, service, ratingParam, verified, sort, page, buildQuery])
 
   useEffect(() => {
     fetchCompanies()
@@ -198,14 +210,26 @@ function SearchContent() {
             {/* Results */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
-                <p className="text-sm text-gray-500">
-                  Showing <span className="font-semibold text-gray-900">{total.toLocaleString()}</span> companies
-                  {city && (
-                    <span>
-                      {' '}in <span className="font-semibold text-gray-900">{city}{state ? `, ${state}` : ''}</span>
-                    </span>
+                <div>
+                  <p className="text-sm text-gray-500">
+                    Showing <span className="font-semibold text-gray-900">{total.toLocaleString()}</span> companies
+                    {city && !fallbackToState && (
+                      <span>
+                        {' '}in <span className="font-semibold text-gray-900">{city}{state ? `, ${state}` : ''}</span>
+                      </span>
+                    )}
+                    {fallbackToState && state && (
+                      <span>
+                        {' '}in <span className="font-semibold text-gray-900">{state}</span>
+                      </span>
+                    )}
+                  </p>
+                  {fallbackToState && city && (
+                    <p className="text-xs text-amber-600 mt-0.5">
+                      No exact matches for &ldquo;{city}&rdquo; — showing all companies in {state}
+                    </p>
                   )}
-                </p>
+                </div>
                 <select
                   value={sort}
                   onChange={(e) => setSort(e.target.value)}

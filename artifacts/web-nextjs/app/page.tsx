@@ -2,7 +2,8 @@ import Link from 'next/link'
 import { supabaseAdmin } from '@/lib/supabase'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { SERVICE_TYPES, US_STATES, FULL_STATE_NAMES } from '@/lib/utils'
+import SearchForm from '@/components/SearchForm'
+import { SERVICE_TYPES, FULL_STATE_NAMES } from '@/lib/utils'
 
 async function getStats() {
   try {
@@ -65,14 +66,14 @@ export default async function HomePage() {
               Find Trusted Commercial Cleaning Companies Near You
             </h1>
             <p className="text-lg text-gray-500 mb-8 max-w-2xl mx-auto">
-              Browse 10,000+ verified commercial cleaning companies across all 50 states. Compare
+              Browse 5,000+ commercial cleaning companies across the US. Compare
               services, read real reviews, and request free quotes.
             </p>
 
             <SearchForm />
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-gray-400">
-              {['10,000+ Companies Listed', 'All 50 States', 'Real Google Reviews', 'Free to Search'].map(
+              {['5,600+ Companies Listed', '36 States Covered', 'Real Google Reviews', 'Free to Search'].map(
                 (item, i, arr) => (
                   <span key={item} className="flex items-center gap-4">
                     {item}
@@ -206,36 +207,3 @@ export default async function HomePage() {
   )
 }
 
-function SearchForm() {
-  return (
-    <form
-      action="/search"
-      method="get"
-      className="flex flex-col sm:flex-row gap-3 max-w-2xl mx-auto"
-    >
-      <input
-        name="city"
-        type="text"
-        placeholder="Enter city or zip code"
-        className="flex-1 border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-      />
-      <select
-        name="service"
-        className="border border-gray-300 rounded-lg px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-accent"
-      >
-        <option value="">All Services</option>
-        {SERVICE_TYPES.map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
-      <button
-        type="submit"
-        className="bg-[#1B3A6B] hover:bg-[#162F56] text-white font-semibold px-6 py-3 rounded-lg text-sm transition-colors whitespace-nowrap"
-      >
-        Search
-      </button>
-    </form>
-  )
-}
