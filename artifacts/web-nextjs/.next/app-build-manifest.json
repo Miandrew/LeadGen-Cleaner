@@ -20,6 +20,11 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/service/[service]/[location]/page.js"
+    ],
+    "/commercial-cleaning/[location]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/commercial-cleaning/[location]/page.js"
     ]
   }
 }
