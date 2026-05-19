@@ -1,0 +1,53 @@
+1. Create lib/supabase.ts — the shared Supabase client used across the whole app:
+typescriptimport { createClient } from '@supabase/supabase-js'
+export const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+2. Create lib/companies.ts — all database query functions the app needs:
+
+getCompanies({ city, state, service, page, limit }) — fetch paginated companies with optional filters
+getCompanyBySlug(slug) — fetch single company for the detail page
+getCompanyByPlaceId(placeId) — fetch single company by place_id
+getCities() — return distinct city + state combinations ordered by company count descending
+getStates() — return distinct states ordered by company count descending
+getFeaturedCompanies(limit) — return featured companies ordered by rating descending
+searchCompanies(query, city, state) — full text search on name, description, services_clean
+getCompaniesByService(service, limit) — return companies by primary_service
+
+3. Update the homepage app/page.tsx to:
+
+Show total company count pulled live from Supabase
+Show a search bar with city and service type inputs
+Show featured companies section (featured = true, fallback to highest rated)
+Show top cities by company count as clickable links
+All data server-side rendered using Next.js 14 server components
+
+4. Create the directory listing page app/directory/page.tsx:
+
+Server component
+Accepts ?city=, ?state=, ?service=, ?page= query params
+Shows paginated list of companies — 20 per page
+Each company card shows: name, city/state, rating, review count, short_description, primary service tag, phone, website link
+Shows filter sidebar with service types and states
+Shows total result count
+
+5. Create the company detail page app/directory/[slug]/page.tsx:
+
+Server component with generateMetadata using seo_title and seo_description
+Shows full company profile: name, description, all contact info, services, industries served, specialties, trust signals, Google Maps link, rating
+If place_id exists show a link to their Google Business profile
+Related companies section — same city, same primary_service, limit 3
+
+
+PHASE 3 — Slug generation
+Your companies table has a slug column but it's probably empty. Slugs are what make URLs like /directory/abc-janitorial-dallas-tx. Paste this into Replit Agent after Phase 2:
+
+Write a script scripts/generate-slugs.ts that:
+
+Reads all companies from Supabase where slug is null or empty
+Generates a slug for each one from name + city + state: lowercase, spaces to hyphens, remove special characters
+Example: "ABC Janitorial" in "Dallas, TX" → abc-janitorial-dallas-tx
+If a slug already exists append -2, -3 etc to make it unique
+Updates each company in Supabase with their slug
+Runs as: npx tsx scripts/generate-slugs.ts
