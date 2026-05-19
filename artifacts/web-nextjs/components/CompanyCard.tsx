@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import CompanyLogo from './CompanyLogo'
 import StarRating from './StarRating'
+import { serviceLabel } from '@/lib/utils'
 
 interface Company {
   id: string
@@ -68,7 +69,7 @@ export default function CompanyCard({ company, isSelected, onToggle }: CompanyCa
         <div className="flex flex-wrap gap-1.5 mt-3">
           {company.services.slice(0, 3).map((s) => (
             <span key={s} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-              {s}
+              {serviceLabel(s)}
             </span>
           ))}
         </div>

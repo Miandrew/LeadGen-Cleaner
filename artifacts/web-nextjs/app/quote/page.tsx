@@ -121,7 +121,7 @@ function QuoteContent() {
                     <label className={labelCls}>Service Needed</label>
                     <select className={inputCls} value={form.service_type} onChange={(e) => set('service_type', e.target.value)}>
                       <option value="">Select a service</option>
-                      {SERVICE_TYPES.map((s) => <option key={s} value={s}>{s}</option>)}
+                      {SERVICE_TYPES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                     </select>
                   </div>
                   <div>

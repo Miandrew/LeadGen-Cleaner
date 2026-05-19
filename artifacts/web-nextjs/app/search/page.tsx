@@ -7,7 +7,7 @@ import Footer from '@/components/Footer'
 import CompanyCard from '@/components/CompanyCard'
 import SelectionBar from '@/components/SelectionBar'
 import { CompanyCardSkeleton } from '@/components/Skeleton'
-import { SERVICE_TYPES, US_STATES } from '@/lib/utils'
+import { SERVICE_TYPES, US_STATES, normalizeServiceParam } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 
 interface Company {
@@ -37,7 +37,7 @@ function SearchContent() {
 
   const city = searchParams.get('city') || ''
   const state = searchParams.get('state') || ''
-  const service = searchParams.get('service') || ''
+  const service = normalizeServiceParam(searchParams.get('service')) || ''
   const ratingParam = searchParams.get('rating') || '1'
   const verified = searchParams.get('verified') === 'true'
   const sort = searchParams.get('sort') || 'rating'
@@ -149,16 +149,16 @@ function SearchContent() {
                       <span>All Services</span>
                     </label>
                     {SERVICE_TYPES.map((s) => (
-                      <label key={s} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <label key={s.value} className="flex items-center gap-2 text-sm cursor-pointer">
                         <input
                           type="radio"
                           name="service"
-                          value={s}
-                          checked={filterService === s}
-                          onChange={() => setFilterService(s)}
+                          value={s.value}
+                          checked={filterService === s.value}
+                          onChange={() => setFilterService(s.value)}
                           className="accent-accent"
                         />
-                        <span>{s}</span>
+                        <span>{s.label}</span>
                       </label>
                     ))}
                   </div>

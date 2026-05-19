@@ -60,8 +60,8 @@ export default function SearchForm() {
       >
         <option value="">All Services</option>
         {SERVICE_TYPES.map((s) => (
-          <option key={s} value={s}>
-            {s}
+          <option key={s.value} value={s.value}>
+            {s.label}
           </option>
         ))}
       </select>

@@ -105,13 +105,37 @@ export const FULL_STATE_NAMES: Record<string, string> = Object.fromEntries(
   US_STATES.map(({ code, name }) => [code, name])
 )
 
-export const SERVICE_TYPES = [
-  'Office Cleaning',
-  'Janitorial',
-  'Medical Cleaning',
-  'Industrial',
-  'Carpet Cleaning',
-  'Window Cleaning',
-  'Floor Care',
-  'Post-Construction',
+export const SERVICE_TYPES: { value: string; label: string }[] = [
+  { value: 'office',            label: 'Office Cleaning' },
+  { value: 'janitorial',        label: 'Janitorial' },
+  { value: 'medical',           label: 'Medical Cleaning' },
+  { value: 'industrial',        label: 'Industrial' },
+  { value: 'carpet',            label: 'Carpet Cleaning' },
+  { value: 'window',            label: 'Window Cleaning' },
+  { value: 'floor',             label: 'Floor Care' },
+  { value: 'post-construction', label: 'Post-Construction' },
+  { value: 'pressure-washing',  label: 'Pressure Washing' },
 ]
+
+export const SERVICE_LABELS: Record<string, string> = Object.fromEntries(
+  SERVICE_TYPES.map((s) => [s.value, s.label])
+)
+
+export function serviceLabel(key: string | null | undefined): string {
+  if (!key) return ''
+  return SERVICE_LABELS[key] || key.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+}
+
+// Normalize any incoming service identifier (key, label, or slugified label) → DB key
+export function normalizeServiceParam(input: string | null | undefined): string | null {
+  if (!input) return null
+  const normalized = input.toLowerCase().trim()
+  const match = SERVICE_TYPES.find(
+    (s) =>
+      s.value === normalized ||
+      s.label.toLowerCase() === normalized ||
+      s.label.toLowerCase().replace(/\s+/g, '-') === normalized ||
+      s.label.toLowerCase().replace(/\s+/g, '') === normalized.replace(/\s+/g, '')
+  )
+  return match ? match.value : normalized
+}

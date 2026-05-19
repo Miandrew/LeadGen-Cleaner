@@ -13,7 +13,7 @@ async function getStats() {
       .eq('active', true)
 
     const serviceMap: Record<string, number> = {}
-    SERVICE_TYPES.forEach((s) => (serviceMap[s] = 0))
+    SERVICE_TYPES.forEach((s) => (serviceMap[s.value] = 0))
     serviceCounts?.forEach((c) => {
       c.services?.forEach((s: string) => {
         if (serviceMap[s] !== undefined) serviceMap[s]++
@@ -143,14 +143,14 @@ export default async function HomePage() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {SERVICE_TYPES.map((service) => (
                 <Link
-                  key={service}
-                  href={`/search?service=${encodeURIComponent(service)}`}
+                  key={service.value}
+                  href={`/search?service=${encodeURIComponent(service.value)}`}
                   className="bg-white border border-gray-200 rounded-xl p-5 hover:border-accent hover:shadow-md transition-all flex flex-col items-center text-center group"
                 >
-                  <span className="text-3xl mb-2">{serviceIcons[service] || '🧽'}</span>
-                  <span className="font-semibold text-gray-900 text-sm group-hover:text-navy">{service}</span>
+                  <span className="text-3xl mb-2">{serviceIcons[service.label] || '🧽'}</span>
+                  <span className="font-semibold text-gray-900 text-sm group-hover:text-navy">{service.label}</span>
                   <span className="text-xs text-gray-400 mt-1">
-                    {(serviceMap[service] || 0).toLocaleString()} companies
+                    {(serviceMap[service.value] || 0).toLocaleString()} companies
                   </span>
                 </Link>
               ))}

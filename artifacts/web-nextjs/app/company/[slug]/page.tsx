@@ -6,7 +6,7 @@ import Footer from '@/components/Footer'
 import CompanyLogo from '@/components/CompanyLogo'
 import StarRating from '@/components/StarRating'
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase'
-import { formatDate, formatPhone, FULL_STATE_NAMES } from '@/lib/utils'
+import { formatDate, formatPhone, FULL_STATE_NAMES, serviceLabel } from '@/lib/utils'
 
 interface Props {
   params: { slug: string }
@@ -48,7 +48,7 @@ async function fetchAndStorePlacesPhotos(company: { id: string; place_id: string
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const company = await getCompany(params.slug)
   if (!company) return { title: 'Company Not Found' }
-  const services = (company.services || []).join(', ')
+  const services = (company.services || []).map((s: string) => serviceLabel(s)).join(', ')
   return {
     title: `${company.name} — Commercial Cleaning in ${company.city}, ${company.state}`,
     description: `${company.name} offers ${services} in ${company.city}, ${company.state}. Rated ${company.rating} stars from ${company.review_count} reviews. Request a free quote today.`,
@@ -120,7 +120,7 @@ export default async function CompanyPage({ params }: Props) {
                   <div className="flex flex-wrap gap-1.5 mt-3">
                     {company.services.map((s: string) => (
                       <span key={s} className="text-xs bg-blue-50 text-accent font-medium px-2.5 py-1 rounded-full border border-blue-100">
-                        {s}
+                        {serviceLabel(s)}
                       </span>
                     ))}
                   </div>

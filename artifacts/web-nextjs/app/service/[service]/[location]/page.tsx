@@ -11,9 +11,12 @@ interface Props {
   params: { service: string; location: string }
 }
 
-function parseService(slug: string): string | null {
-  const normalized = slug.replace(/-/g, ' ')
-  return SERVICE_TYPES.find((s) => s.toLowerCase() === normalized.toLowerCase()) || null
+function parseService(slug: string): { value: string; label: string } | null {
+  const normalized = slug.toLowerCase()
+  const match = SERVICE_TYPES.find(
+    (s) => s.value === normalized || s.label.toLowerCase().replace(/\s+/g, '-') === normalized
+  )
+  return match ? { value: match.value, label: match.label } : null
 }
 
 function isStatePage(location: string): boolean {
@@ -36,7 +39,7 @@ function parseCityState(location: string): { city: string; state: string } {
 export async function generateStaticParams() {
   return SERVICE_TYPES.slice(0, 8).flatMap((service) =>
     US_STATES.slice(0, 10).map((state) => ({
-      service: service.toLowerCase().replace(/\s+/g, '-').replace(/\//g, '-'),
+      service: service.value,
       location: state.name.toLowerCase().replace(/\s+/g, '-'),
     }))
   )
@@ -44,14 +47,15 @@ export async function generateStaticParams() {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const service = parseService(params.service)
-  const displayService = service || params.service.replace(/-/g, ' ')
+  const displayService = service?.label || params.service.replace(/-/g, ' ')
+  const serviceKey = service?.value
 
   if (isStatePage(params.location)) {
     const code = stateNameToCode(params.location)
     const stateName = code ? FULL_STATE_NAMES[code] : params.location.replace(/-/g, ' ')
     let count = 0
-    if (isSupabaseConfigured() && supabaseAdmin) {
-      const res = await supabaseAdmin.from('companies').select('*', { count: 'exact', head: true }).eq('state', code || params.location.toUpperCase()).contains('services', [displayService])
+    if (isSupabaseConfigured() && supabaseAdmin && serviceKey) {
+      const res = await supabaseAdmin.from('companies').select('*', { count: 'exact', head: true }).eq('state', code || params.location.toUpperCase()).contains('services', [serviceKey])
       count = res.count || 0
     }
     return {
@@ -62,8 +66,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     const { city, state } = parseCityState(params.location)
     const stateName = FULL_STATE_NAMES[state] || state
     let count = 0
-    if (isSupabaseConfigured() && supabaseAdmin) {
-      const res = await supabaseAdmin.from('companies').select('*', { count: 'exact', head: true }).ilike('city', city).eq('state', state).contains('services', [displayService])
+    if (isSupabaseConfigured() && supabaseAdmin && serviceKey) {
+      const res = await supabaseAdmin.from('companies').select('*', { count: 'exact', head: true }).ilike('city', city).eq('state', state).contains('services', [serviceKey])
       count = res.count || 0
     }
     return {
@@ -75,7 +79,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ServiceLocationPage({ params }: Props) {
   const service = parseService(params.service)
-  const displayService = service || params.service.replace(/-/g, ' ')
+  const displayService = service?.label || params.service.replace(/-/g, ' ')
+  const serviceKey = service?.value
 
   if (isStatePage(params.location)) {
     const code = stateNameToCode(params.location)
@@ -84,8 +89,8 @@ export default async function ServiceLocationPage({ params }: Props) {
     let companies: unknown[] = []
     let count = 0
 
-    if (isSupabaseConfigured() && supabaseAdmin) {
-      const res = await supabaseAdmin.from('companies').select('*').eq('state', code || params.location.toUpperCase()).contains('services', [displayService]).eq('active', true).order('rating', { ascending: false }).limit(20)
+    if (isSupabaseConfigured() && supabaseAdmin && serviceKey) {
+      const res = await supabaseAdmin.from('companies').select('*').eq('state', code || params.location.toUpperCase()).contains('services', [serviceKey]).eq('active', true).order('rating', { ascending: false }).limit(20)
       companies = res.data || []
       count = res.count || 0
     }
@@ -114,8 +119,8 @@ export default async function ServiceLocationPage({ params }: Props) {
     let companies: unknown[] = []
     let count = 0
 
-    if (isSupabaseConfigured() && supabaseAdmin) {
-      const res = await supabaseAdmin.from('companies').select('*').ilike('city', city).eq('state', state).contains('services', [displayService]).eq('active', true).order('rating', { ascending: false }).limit(20)
+    if (isSupabaseConfigured() && supabaseAdmin && serviceKey) {
+      const res = await supabaseAdmin.from('companies').select('*').ilike('city', city).eq('state', state).contains('services', [serviceKey]).eq('active', true).order('rating', { ascending: false }).limit(20)
       companies = res.data || []
       count = res.count || 0
     }

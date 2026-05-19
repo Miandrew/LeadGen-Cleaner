@@ -162,14 +162,14 @@ export default function DashboardListingPage() {
               <h2 className="font-semibold text-gray-900 mb-4">Services Offered</h2>
               <div className="grid grid-cols-2 gap-2">
                 {SERVICE_TYPES.map((s) => (
-                  <label key={s} className="flex items-center gap-2 cursor-pointer text-sm">
+                  <label key={s.value} className="flex items-center gap-2 cursor-pointer text-sm">
                     <input
                       type="checkbox"
-                      checked={(form.services || []).includes(s)}
-                      onChange={() => toggleService(s)}
+                      checked={(form.services || []).includes(s.value)}
+                      onChange={() => toggleService(s.value)}
                       className="accent-accent"
                     />
-                    {s}
+                    {s.label}
                   </label>
                 ))}
               </div>
