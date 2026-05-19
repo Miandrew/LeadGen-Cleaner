@@ -44,6 +44,7 @@ function SearchContent() {
   const page = parseInt(searchParams.get('page') || '1', 10)
 
   const [filterService, setFilterService] = useState(service)
+  const [filterState, setFilterState] = useState(state)
   const [filterRating, setFilterRating] = useState(ratingParam)
   const [filterVerified, setFilterVerified] = useState(verified)
 
@@ -52,7 +53,7 @@ function SearchContent() {
   const buildQuery = useCallback((withCity: boolean) => {
     let q = supabase.from('companies').select('*', { count: 'exact' }).eq('active', true)
     if (withCity && city) q = q.ilike('city', `%${city}%`)
-    if (state) q = q.eq('state', state)
+    if (state) q = q.eq('state', state.toUpperCase())
     if (service) q = q.contains('services', [service])
     if (parseFloat(ratingParam) > 1) q = q.gte('rating', parseFloat(ratingParam))
     if (verified) q = q.eq('claimed', true)
@@ -89,7 +90,7 @@ function SearchContent() {
   const applyFilters = () => {
     const params = new URLSearchParams()
     if (city) params.set('city', city)
-    if (state) params.set('state', state)
+    if (filterState) params.set('state', filterState)
     if (filterService) params.set('service', filterService)
     if (parseFloat(filterRating) > 1) params.set('rating', filterRating)
     if (filterVerified) params.set('verified', 'true')
@@ -162,6 +163,20 @@ function SearchContent() {
                       </label>
                     ))}
                   </div>
+                </div>
+
+                <div className="mb-5">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">State</h3>
+                  <select
+                    value={filterState}
+                    onChange={(e) => setFilterState(e.target.value)}
+                    className="w-full text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white"
+                  >
+                    <option value="">All States</option>
+                    {US_STATES.map((s) => (
+                      <option key={s.code} value={s.code}>{s.name}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div className="mb-5">
