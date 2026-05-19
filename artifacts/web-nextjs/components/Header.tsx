@@ -10,6 +10,8 @@ export default function Header() {
 
   const navLinks = [
     { href: '/search', label: 'Browse Directory' },
+    { href: '/browse-by-service', label: 'By Service' },
+    { href: '/browse-by-state', label: 'By State' },
     { href: '/for-cleaning-companies', label: 'For Cleaning Companies' },
     { href: '/login', label: 'Login' },
   ]

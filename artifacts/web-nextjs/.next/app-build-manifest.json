@@ -35,6 +35,16 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/state/[state]/page.js"
+    ],
+    "/browse-by-service/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/browse-by-service/page.js"
+    ],
+    "/browse-by-state/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/browse-by-state/page.js"
     ]
   }
 }

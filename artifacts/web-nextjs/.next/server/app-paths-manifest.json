@@ -1,6 +1,7 @@
 {
   "/page": "app/page.js",
-  "/service/[service]/[location]/page": "app/service/[service]/[location]/page.js",
-  "/search/page": "app/search/page.js",
-  "/commercial-cleaning/[location]/page": "app/commercial-cleaning/[location]/page.js"
+  "/browse-by-service/page": "app/browse-by-service/page.js",
+  "/browse-by-state/page": "app/browse-by-state/page.js",
+  "/commercial-cleaning/[location]/page": "app/commercial-cleaning/[location]/page.js",
+  "/search/page": "app/search/page.js"
 }
