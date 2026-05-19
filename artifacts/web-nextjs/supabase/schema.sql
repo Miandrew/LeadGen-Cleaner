@@ -1,134 +1,194 @@
-create table companies (
-  id uuid primary key default gen_random_uuid(),
-  name text not null,
-  slug text unique,
-  website text,
-  phone text,
-  email text,
-  address text,
-  city text,
-  state text,
-  zip text,
-  services text[],
-  rating float,
-  review_count int default 0,
-  description text,
-  place_id text,
-  image_urls text[],
-  logo_url text,
-  claimed boolean default false,
-  active boolean default true,
-  do_not_email boolean default false,
-  years_in_business int,
-  certifications text[],
-  employee_count text,
-  created_at timestamp default now()
+-- CommercialCleaningNearMe.com — Full Schema
+-- Run this in: Supabase → SQL Editor → New Query → Run
+
+-- ─── Companies ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS companies (
+  id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name                    text NOT NULL,
+  name_for_emails         text,
+  slug                    text UNIQUE,
+  place_id                text UNIQUE,
+  reviews_id              text,
+  address                 text,
+  street                  text,
+  city                    text,
+  state                   text,
+  zip                     text,
+  city_state              text,
+  latitude                float,
+  longitude               float,
+  phone                   text,
+  email                   text,
+  website                 text,
+  domain                  text,
+  google_maps_url         text,
+  rating                  float,
+  review_count            int DEFAULT 0,
+  review_score_label      text,
+  photo                   text,
+  image_urls              text[],
+  logo_url                text,
+  owner_id                text,
+  owner_title             text,
+  business_status         text,
+  working_hours           text,
+  source                  text,
+  -- Social / contact intel
+  company_linkedin        text,
+  company_facebook        text,
+  company_instagram       text,
+  company_twitter         text,
+  company_youtube         text,
+  full_name               text,
+  first_name              text,
+  last_name               text,
+  title                   text,
+  contact_phone           text,
+  contact_linkedin        text,
+  -- Website intel
+  website_title           text,
+  website_description     text,
+  website_generator       text,
+  website_has_gtm         boolean,
+  website_has_fb_pixel    boolean,
+  -- Services & categorization
+  services                text[],
+  services_clean          text,
+  primary_service         text,
+  tags                    text,
+  industries_served       text[],
+  specialties             text[],
+  trust_signals           text[],
+  certifications          text[],
+  service_areas           text[],
+  -- Content
+  description             text,
+  short_description       text,
+  about                   text,
+  seo_title               text,
+  seo_description         text,
+  -- Business info
+  years_in_business       int,
+  employee_count          text,
+  -- Flags
+  claimed                 boolean DEFAULT false,
+  active                  boolean DEFAULT true,
+  do_not_email            boolean DEFAULT false,
+  created_at              timestamp DEFAULT now()
 );
 
-create table reviews (
-  id uuid primary key default gen_random_uuid(),
-  company_id uuid references companies(id),
-  author text,
-  rating float,
+-- ─── Reviews ────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS reviews (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id  uuid REFERENCES companies(id) ON DELETE CASCADE,
+  author      text,
+  rating      float,
   review_text text,
   review_date text,
-  source text default 'google',
-  created_at timestamp default now()
+  source      text DEFAULT 'google',
+  created_at  timestamp DEFAULT now()
 );
 
-create table leads (
-  id uuid primary key default gen_random_uuid(),
-  service_type text,
-  city text,
-  state text,
-  contact_name text,
-  contact_email text,
-  contact_phone text,
-  business_name text,
-  building_type text,
-  building_size text,
-  frequency text,
-  message text,
-  selected_company_ids uuid[],
-  status text default 'open',
-  created_at timestamp default now()
+-- ─── Leads ──────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS leads (
+  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  service_type          text,
+  city                  text,
+  state                 text,
+  contact_name          text,
+  contact_email         text,
+  contact_phone         text,
+  business_name         text,
+  building_type         text,
+  building_size         text,
+  frequency             text,
+  message               text,
+  selected_company_ids  uuid[],
+  status                text DEFAULT 'open',
+  created_at            timestamp DEFAULT now()
 );
 
-create table lead_purchases (
-  id uuid primary key default gen_random_uuid(),
-  lead_id uuid references leads(id),
-  company_id uuid references companies(id),
-  amount_paid float default 35,
-  stripe_payment_id text unique,
-  purchased_at timestamp default now()
+-- ─── Lead Purchases ─────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS lead_purchases (
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id           uuid REFERENCES leads(id),
+  company_id        uuid REFERENCES companies(id),
+  amount_paid       float DEFAULT 35,
+  stripe_payment_id text UNIQUE,
+  purchased_at      timestamp DEFAULT now()
 );
 
-create table users (
-  id uuid primary key default gen_random_uuid(),
-  email text unique,
-  company_id uuid references companies(id),
-  role text default 'company',
-  stripe_customer_id text,
+-- ─── Users ──────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS users (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  email               text UNIQUE,
+  company_id          uuid REFERENCES companies(id),
+  role                text DEFAULT 'company',
+  stripe_customer_id  text,
   subscription_status text,
-  subscription_tier text,
-  leads_remaining int default 0,
-  created_at timestamp default now()
+  subscription_tier   text,
+  leads_remaining     int DEFAULT 0,
+  created_at          timestamp DEFAULT now()
 );
 
-create table company_onboarding (
-  id uuid primary key default gen_random_uuid(),
-  company_id uuid references companies(id),
-  how_getting_clients text[],
-  biggest_challenge text,
+-- ─── Company Onboarding ─────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS company_onboarding (
+  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id            uuid REFERENCES companies(id),
+  how_getting_clients   text[],
+  biggest_challenge     text,
   new_clients_per_month text,
-  marketing_budget text,
-  segment text,
-  contacted boolean default false,
-  created_at timestamp default now()
+  marketing_budget      text,
+  segment               text,
+  contacted             boolean DEFAULT false,
+  created_at            timestamp DEFAULT now()
 );
 
-create table featured_listings (
-  id uuid primary key default gen_random_uuid(),
-  company_id uuid references companies(id),
-  placement_type text,
-  state text,
-  city text,
-  stripe_subscription_id text,
-  active boolean default true,
-  starts_at timestamp,
-  ends_at timestamp
+-- ─── Featured Listings ──────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS featured_listings (
+  id                      uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id              uuid REFERENCES companies(id),
+  placement_type          text,
+  state                   text,
+  city                    text,
+  stripe_subscription_id  text,
+  active                  boolean DEFAULT true,
+  starts_at               timestamp,
+  ends_at                 timestamp
 );
 
-create table email_sequences (
-  id uuid primary key default gen_random_uuid(),
-  company_id uuid references companies(id),
-  sequence_name text,
-  sent_at timestamp default now(),
-  unique(company_id, sequence_name)
+-- ─── Email Sequences ────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS email_sequences (
+  id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id     uuid REFERENCES companies(id),
+  sequence_name  text,
+  sent_at        timestamp DEFAULT now(),
+  UNIQUE(company_id, sequence_name)
 );
 
-create index on companies(city);
-create index on companies(state);
-create index on companies(rating);
-create index on companies(claimed);
-create index on leads(status);
-create index on leads(contact_email);
-create index on leads(created_at);
-create index on lead_purchases(stripe_payment_id);
+-- ─── Indexes ────────────────────────────────────────────────────────────────
+CREATE INDEX IF NOT EXISTS companies_city_idx     ON companies(city);
+CREATE INDEX IF NOT EXISTS companies_state_idx    ON companies(state);
+CREATE INDEX IF NOT EXISTS companies_rating_idx   ON companies(rating);
+CREATE INDEX IF NOT EXISTS companies_claimed_idx  ON companies(claimed);
+CREATE INDEX IF NOT EXISTS companies_active_idx   ON companies(active);
+CREATE INDEX IF NOT EXISTS leads_status_idx       ON leads(status);
+CREATE INDEX IF NOT EXISTS leads_email_idx        ON leads(contact_email);
+CREATE INDEX IF NOT EXISTS leads_created_idx      ON leads(created_at);
+CREATE INDEX IF NOT EXISTS lead_purchases_stripe  ON lead_purchases(stripe_payment_id);
 
-create or replace function decrement_leads(p_company_id uuid)
-returns int as $$
-declare
+-- ─── Helper Functions ───────────────────────────────────────────────────────
+CREATE OR REPLACE FUNCTION decrement_leads(p_company_id uuid)
+RETURNS int AS $$
+DECLARE
   current_remaining int;
-begin
-  select leads_remaining into current_remaining
-  from users where company_id = p_company_id;
-  if current_remaining > 0 then
-    update users set leads_remaining = leads_remaining - 1
-    where company_id = p_company_id;
-    return current_remaining - 1;
-  else
-    return -1;
-  end if;
-end;
-$$ language plpgsql;
+BEGIN
+  SELECT leads_remaining INTO current_remaining FROM users WHERE company_id = p_company_id;
+  IF current_remaining > 0 THEN
+    UPDATE users SET leads_remaining = leads_remaining - 1 WHERE company_id = p_company_id;
+    RETURN current_remaining - 1;
+  ELSE
+    RETURN -1;
+  END IF;
+END;
+$$ LANGUAGE plpgsql;

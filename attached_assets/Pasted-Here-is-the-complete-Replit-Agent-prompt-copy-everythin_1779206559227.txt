@@ -1,0 +1,131 @@
+Here is the complete Replit Agent prompt — copy everything below this line and paste it directly into the Replit Agent:
+
+Create a CSV import script that reads master_enriched_final_clean.csv and inserts all companies into Supabase. The project is Next.js 14 with TypeScript.
+STEP 1 — Create scripts/import.ts
+At the top of the file add this comment block:
+typescript// CSV Import Script
+// ─────────────────────────────────────────────────────
+// Run:   npx tsx scripts/import.ts
+// File:  master_enriched_final_clean.csv (drag into Replit file panel first)
+// ─────────────────────────────────────────────────────
+STEP 2 — Install dependencies if not already present
+npm install @supabase/supabase-js papaparse @types/papaparse tsx dotenv
+STEP 3 — Write the import script
+The script must do the following:
+Load environment variables from .env.local at the very top of the script using dotenv. If either NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing or empty print exactly which one is missing and exit immediately — do not proceed.
+Read master_enriched_final_clean.csv from the root of the project using papaparse with header: true and skipEmptyLines: true.
+For each row apply these cleaning rules before doing anything else:
+
+Any field that is an empty string, or contains only the text nan, NaN, None, null, or undefined → convert to null
+rating → parse as float. If the result is not a number or is outside 0–5 set to null
+review_count → parse as integer from the CSV column named reviews. If not a positive integer set to null
+latitude → parse as float. If outside -90 to 90 set to null
+longitude → parse as float. If outside -180 to 180 set to null
+years_in_business → parse as integer. If not a valid positive integer set to null
+website_has_gtm → convert string "true"/"false"/"1"/"0" to boolean. Anything else set to null
+website_has_fb_pixel → same boolean conversion
+Skip the entire row if name is empty or null
+Skip the entire row if business_status is not exactly OPERATIONAL
+
+For array columns — split the string by ", " (comma space) and filter out any empty strings. If the result is an empty array set to null:
+
+industries_served → TEXT[]
+specialties → TEXT[]
+trust_signals → TEXT[]
+certifications → TEXT[]
+service_areas → TEXT[]
+services_clean split by ", " → services TEXT[]
+
+Map every CSV column to the database column exactly as follows:
+name                         → name
+slug                         → slug
+place_id                     → place_id
+address                      → address
+street                       → street
+city                         → city
+state                        → state
+latitude                     → latitude
+longitude                    → longitude
+city_state                   → city_state
+phone                        → phone
+email                        → email
+website                      → website
+domain                       → domain
+google_maps_url              → google_maps_url
+rating                       → rating
+reviews (parsed as int)      → review_count
+reviews_id                   → reviews_id
+photo                        → photo
+owner_id                     → owner_id
+owner_title                  → owner_title
+business_status              → business_status
+working_hours_csv_compatible → working_hours
+source                       → source
+company_linkedin             → company_linkedin
+company_facebook             → company_facebook
+company_instagram            → company_instagram
+company_x                    → company_twitter
+company_youtube              → company_youtube
+full_name                    → full_name
+first_name                   → first_name
+last_name                    → last_name
+title                        → title
+contact_phone                → contact_phone
+contact_linkedin             → contact_linkedin
+website_title                → website_title
+website_description          → website_description
+website_generator            → website_generator
+website_has_gtm              → website_has_gtm
+website_has_fb_pixel         → website_has_fb_pixel
+services_clean               → services_clean
+primary_service              → primary_service
+tags                         → tags
+description                  → description
+short_description            → short_description
+about                        → about
+seo_title                    → seo_title
+seo_description              → seo_description
+name_for_emails              → name_for_emails
+review_score_label           → review_score_label
+industries_served            → industries_served
+specialties                  → specialties
+trust_signals                → trust_signals
+certifications               → certifications
+service_areas                → service_areas
+years_in_business            → years_in_business
+Process all rows in batches of 50. For each batch use Supabase upsert with onConflict: 'place_id'. This means if a company with that place_id already exists it gets updated — if it doesn't exist it gets inserted. Re-running the script is always safe.
+After every batch print this exact format:
+Inserted: 50 | Total: 150 | Remaining: 5464
+If a batch fails log this exact format and continue — never crash the whole script over one bad batch:
+BATCH ERROR at row 150: [error message]
+Add a 100ms delay between batches to avoid overwhelming Supabase.
+STEP 4 — Print startup message before processing begins
+═══════════════════════════════════════════════════
+  Commercial Cleaning Directory — CSV Import
+  File:     master_enriched_final_clean.csv
+  Database: [print the Supabase URL]
+  ───────────────────────────────────────────────
+  Starting import...
+═══════════════════════════════════════════════════
+STEP 5 — Print final summary when complete
+═══════════════════════════════════════════════════
+  Import complete
+  Inserted/updated:   5614
+  Skipped:            12
+  Batch errors:       0
+  ───────────────────────────────────────────────
+  Go to Supabase → Table Editor → companies
+  to verify your data.
+═══════════════════════════════════════════════════
+STEP 6 — TypeScript requirements
+
+Use createClient from @supabase/supabase-js
+Use the SUPABASE_SERVICE_ROLE_KEY — not the anon key
+The script must have no TypeScript errors before running
+All parsed values must have correct TypeScript types — no implicit any
+Use fs.readFileSync to read the CSV file then pass the string to papaparse
+
+STEP 7 — After building
+Do not run the script yet. Show me the completed scripts/import.ts file in full. Confirm it has no TypeScript errors by running:
+npx tsc scripts/import.ts --noEmit --esModuleInterop --resolveJsonModule --moduleResolution node
+Show me the output of that command. If there are zero errors tell me it's ready to run. If there are errors fix them and show me the corrected file before proceeding.
