@@ -29,7 +29,7 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY)
 
 const CSV_FILE = path.resolve(
   __dirname, '..', '..', '..', 'attached_assets',
-  'master_enriched_final_clean_(1)_1779205830615.csv'
+  'master_final_1779300929786.csv'
 )
 const BATCH_SIZE = 50
 const BATCH_DELAY_MS = 100
