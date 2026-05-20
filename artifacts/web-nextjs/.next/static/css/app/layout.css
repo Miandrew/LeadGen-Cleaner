@@ -953,6 +953,10 @@ video {
 .gap-y-2 {
   row-gap: 0.5rem;
 }
+.gap-x-2 {
+  -moz-column-gap: 0.5rem;
+       column-gap: 0.5rem;
+}
 .space-y-1 > :not([hidden]) ~ :not([hidden]) {
   --tw-space-y-reverse: 0;
   margin-top: calc(0.25rem * calc(1 - var(--tw-space-y-reverse)));
@@ -1315,6 +1319,9 @@ video {
 .pt-6 {
   padding-top: 1.5rem;
 }
+.pb-0\.5 {
+  padding-bottom: 0.125rem;
+}
 .text-left {
   text-align: left;
 }
@@ -1376,6 +1383,9 @@ video {
 }
 .capitalize {
   text-transform: capitalize;
+}
+.normal-case {
+  text-transform: none;
 }
 .leading-none {
   line-height: 1;
