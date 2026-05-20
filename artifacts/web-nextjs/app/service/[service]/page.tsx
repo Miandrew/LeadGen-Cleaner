@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
+import ServiceFilter from '@/components/ServiceFilter'
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase'
 import { SERVICE_TYPES, US_STATES, FULL_STATE_NAMES } from '@/lib/utils'
 
@@ -32,8 +33,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const service = parseService(params.service)
   if (!service) return { title: 'Service Not Found' }
   return {
-    title: `${service.label} Companies by State | CCNearMe`,
-    description: `Browse ${service.label.toLowerCase()} companies across the United States. Find verified providers in every state and request free quotes.`,
+    title: `${service.label} Companies by State & City | CCNearMe`,
+    description: `Browse ${service.label.toLowerCase()} companies across the United States. Filter by state and city to find verified providers near you and request free quotes.`,
   }
 }
 
@@ -41,8 +42,8 @@ export default async function ServiceHubPage({ params }: Props) {
   const service = parseService(params.service)
   if (!service) notFound()
 
-  let stateCounts = new Map<string, number>()
-  const cityCounts = new Map<string, { city: string; state: string; count: number }>()
+  // Map: stateCode → { count, cities: Map<cityKey, {city,count}> }
+  const stateMap = new Map<string, { count: number; cities: Map<string, { city: string; count: number }> }>()
   let totalCount = 0
 
   if (isSupabaseConfigured() && supabaseAdmin) {
@@ -59,13 +60,15 @@ export default async function ServiceHubPage({ params }: Props) {
       for (const row of data as { state: string | null; city: string | null }[]) {
         if (!row.state) continue
         const code = row.state.toUpperCase()
-        stateCounts.set(code, (stateCounts.get(code) || 0) + 1)
         totalCount++
+        if (!stateMap.has(code)) stateMap.set(code, { count: 0, cities: new Map() })
+        const stateEntry = stateMap.get(code)!
+        stateEntry.count++
         if (row.city) {
-          const key = `${row.city.toLowerCase()}|${code}`
-          const existing = cityCounts.get(key)
+          const cityKey = row.city.toLowerCase()
+          const existing = stateEntry.cities.get(cityKey)
           if (existing) existing.count++
-          else cityCounts.set(key, { city: row.city, state: code, count: 1 })
+          else stateEntry.cities.set(cityKey, { city: row.city, count: 1 })
         }
       }
       if (data.length < pageSize) break
@@ -73,93 +76,152 @@ export default async function ServiceHubPage({ params }: Props) {
     }
   }
 
+  // Build sorted states for the grid and filter
   const sortedStates = US_STATES
-    .map((s) => ({ ...s, count: stateCounts.get(s.code) || 0 }))
+    .map((s) => {
+      const entry = stateMap.get(s.code)
+      return { code: s.code, name: s.name, slug: stateSlug(s.name), count: entry?.count || 0, cities: entry?.cities }
+    })
     .filter((s) => s.count > 0)
     .sort((a, b) => b.count - a.count)
 
-  const topCities = [...cityCounts.values()]
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 30)
+  // Serialize cities per state for the client filter component
+  const filterStates = sortedStates.map((s) => ({
+    code: s.code,
+    name: s.name,
+    slug: s.slug,
+    count: s.count,
+    cities: [...(s.cities?.values() || [])]
+      .sort((a, b) => b.count - a.count)
+      .map((c) => ({
+        city: c.city,
+        slug: `${c.city.toLowerCase().replace(/\s+/g, '-')}-${s.code.toLowerCase()}`,
+        count: c.count,
+      })),
+  }))
+
+  // Top cities nationwide (across all states), for the grid below
+  const allCities = sortedStates.flatMap((s) =>
+    [...(s.cities?.values() || [])].map((c) => ({
+      city: c.city,
+      state: s.code,
+      stateName: s.name,
+      count: c.count,
+      slug: `${c.city.toLowerCase().replace(/\s+/g, '-')}-${s.code.toLowerCase()}`,
+    }))
+  )
+  const topCities = allCities.sort((a, b) => b.count - a.count).slice(0, 32)
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://commercialcleaningnearme.com' },
+      { '@type': 'ListItem', position: 2, name: `${service.label} Companies`, item: `https://commercialcleaningnearme.com/service/${service.value}` },
+    ],
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+
       <main className="flex-1 bg-gray-50">
         <div className="bg-white border-b border-gray-200 py-10">
-          <div className="max-w-5xl mx-auto px-4">
-            <nav className="text-sm text-gray-500 mb-3">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <nav className="text-xs text-gray-400 mb-3">
               <Link href="/" className="hover:text-accent">Home</Link>
+              <span className="mx-2">/</span>
+              <Link href="/browse-by-service" className="hover:text-accent">Browse by Service</Link>
               <span className="mx-2">/</span>
               <span>{service.label}</span>
             </nav>
-            <h1 className="text-3xl font-bold text-navy mb-3">{service.label} Companies by State</h1>
+            <h1 className="text-3xl font-bold text-navy mb-3">{service.label} Companies</h1>
             <p className="text-gray-500">
               {totalCount > 0
-                ? `Browse ${totalCount.toLocaleString()} ${service.label.toLowerCase()} companies across ${sortedStates.length} states.`
+                ? `${totalCount.toLocaleString()} ${service.label.toLowerCase()} companies across ${sortedStates.length} states and ${allCities.length} cities. Filter by location below.`
                 : `Browse ${service.label.toLowerCase()} companies across the United States.`}
             </p>
           </div>
         </div>
 
-        <div className="max-w-5xl mx-auto px-4 py-8">
-          {sortedStates.length === 0 ? (
-            <div className="text-center py-20 text-gray-500">
-              <p>No companies found for this service yet.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {sortedStates.map((s) => (
-                <Link
-                  key={s.code}
-                  href={`/service/${service.value}/${stateSlug(s.name)}`}
-                  className="bg-white border border-gray-200 rounded-lg p-4 hover:border-accent hover:shadow-sm transition-all"
-                >
-                  <div className="font-semibold text-navy">{s.name}</div>
-                  <div className="text-xs text-gray-500 mt-1">{s.count.toLocaleString()} companies</div>
-                </Link>
-              ))}
-            </div>
-          )}
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <div className="flex flex-col lg:flex-row gap-8">
 
-          {topCities.length > 0 && (
-            <div className="mt-12">
-              <h2 className="text-lg font-bold text-navy mb-1">Top Cities for {service.label}</h2>
-              <p className="text-sm text-gray-500 mb-4">
-                The biggest metros offering {service.label.toLowerCase()} services.
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                {topCities.map((c) => {
-                  const slug = `${c.city.toLowerCase().replace(/\s+/g, '-')}-${c.state.toLowerCase()}`
-                  return (
+            {/* Sidebar filter */}
+            <aside className="lg:w-64 flex-shrink-0">
+              <ServiceFilter serviceValue={service.value} states={filterStates} />
+
+              {/* Other services */}
+              <div className="mt-6 bg-white rounded-xl border border-gray-200 p-5">
+                <h3 className="text-sm font-bold text-gray-900 mb-3">Other Services</h3>
+                <div className="flex flex-col gap-1.5">
+                  {SERVICE_TYPES.filter((s) => s.value !== service.value).map((s) => (
                     <Link
-                      key={`${c.city}-${c.state}`}
-                      href={`/service/${service.value}/${slug}`}
-                      className="bg-white border border-gray-200 rounded-lg px-3 py-2 hover:border-accent hover:text-accent transition-colors flex items-center justify-between gap-2"
+                      key={s.value}
+                      href={`/service/${s.value}`}
+                      className="text-sm text-gray-600 hover:text-accent hover:underline"
                     >
-                      <span className="text-sm text-gray-700 truncate">
-                        {c.city}, {c.state}
-                      </span>
-                      <span className="text-xs text-gray-400 flex-shrink-0">{c.count}</span>
+                      {s.label}
                     </Link>
-                  )
-                })}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            </aside>
 
-          <div className="mt-12 bg-white border border-gray-200 rounded-xl p-6">
-            <h2 className="text-lg font-bold text-navy mb-3">Browse Other Services</h2>
-            <div className="flex flex-wrap gap-2">
-              {SERVICE_TYPES.filter((s) => s.value !== service.value).map((s) => (
-                <Link
-                  key={s.value}
-                  href={`/service/${s.value}`}
-                  className="text-sm px-3 py-1.5 bg-blue-50 text-accent rounded-full hover:bg-blue-100 transition-colors"
-                >
-                  {s.label}
-                </Link>
-              ))}
+            {/* Main content */}
+            <div className="flex-1 min-w-0">
+
+              {/* States grid */}
+              <div className="mb-10">
+                <h2 className="text-lg font-bold text-navy mb-1">Browse by State</h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  Select a state to see all {service.label.toLowerCase()} companies and cities.
+                </p>
+                {sortedStates.length === 0 ? (
+                  <div className="text-center py-12 text-gray-500">No companies found for this service yet.</div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2.5">
+                    {sortedStates.map((s) => (
+                      <Link
+                        key={s.code}
+                        href={`/service/${service.value}/${s.slug}`}
+                        className="bg-white border border-gray-200 rounded-lg p-3 hover:border-accent hover:shadow-sm transition-all"
+                      >
+                        <div className="font-semibold text-navy text-sm">{s.name}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">
+                          {s.count.toLocaleString()} co · {s.cities?.size || 0} cities
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Top cities grid */}
+              {topCities.length > 0 && (
+                <div>
+                  <h2 className="text-lg font-bold text-navy mb-1">Top Cities for {service.label}</h2>
+                  <p className="text-sm text-gray-500 mb-4">
+                    The most active markets for {service.label.toLowerCase()} services nationwide.
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
+                    {topCities.map((c) => (
+                      <Link
+                        key={`${c.city}-${c.state}`}
+                        href={`/service/${service.value}/${c.slug}`}
+                        className="bg-white border border-gray-200 rounded-lg px-3 py-2.5 hover:border-accent hover:text-accent transition-colors flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm text-gray-800 font-medium truncate">{c.city}</div>
+                          <div className="text-xs text-gray-400">{c.stateName}</div>
+                        </div>
+                        <span className="text-xs text-gray-400 flex-shrink-0 bg-gray-50 rounded px-1.5 py-0.5">{c.count}</span>
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
