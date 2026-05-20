@@ -1,9 +1,9 @@
 {
   "pages": {
-    "/search/page": [
+    "/claim/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/search/page.js"
+      "static/chunks/app/claim/page.js"
     ],
     "/layout": [
       "static/chunks/webpack.js",
@@ -16,30 +16,30 @@
       "static/chunks/main-app.js",
       "static/chunks/app/page.js"
     ],
-    "/commercial-cleaning/[location]/page": [
+    "/browse-by-service/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/commercial-cleaning/[location]/page.js"
-    ],
-    "/service/[service]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/service/[service]/page.js"
-    ],
-    "/service/[service]/[location]/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/service/[service]/[location]/page.js"
+      "static/chunks/app/browse-by-service/page.js"
     ],
     "/browse-by-state/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/browse-by-state/page.js"
     ],
-    "/browse-by-service/page": [
+    "/state/[state]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/browse-by-service/page.js"
+      "static/chunks/app/state/[state]/page.js"
+    ],
+    "/service/[service]/[location]/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/service/[service]/[location]/page.js"
+    ],
+    "/search/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/search/page.js"
     ]
   }
 }
