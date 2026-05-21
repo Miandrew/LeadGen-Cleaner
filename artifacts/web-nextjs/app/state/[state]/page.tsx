@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic'
+export const revalidate = 86400
 
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -30,8 +30,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const state = parseState(params.state)
   if (!state) return { title: 'State Not Found' }
   return {
-    title: `Commercial Cleaning Services in ${state.name} | CCNearMe`,
+    title: `Commercial Cleaning Services in ${state.name} — Browse by Type | CCNearMe`,
     description: `Browse commercial cleaning services available in ${state.name}. Find office cleaning, janitorial, carpet, window, and more.`,
+    alternates: {
+      canonical: `https://commercialcleaningnearme.com/commercial-cleaning/${params.state}`,
+    },
   }
 }
 
@@ -80,7 +83,7 @@ export default async function StateHubPage({ params }: Props) {
               <span className="mx-2">/</span>
               <span>{state.name}</span>
             </nav>
-            <h1 className="text-3xl font-bold text-navy mb-3">Commercial Cleaning Services in {state.name}</h1>
+            <h1 className="text-3xl font-bold text-navy mb-3">Commercial Cleaning Services in {state.name} — Browse by Type</h1>
             <p className="text-gray-500">
               {totalCompanies > 0
                 ? `${totalCompanies.toLocaleString()} cleaning companies across ${sortedServices.length} service categories in ${state.name}.`

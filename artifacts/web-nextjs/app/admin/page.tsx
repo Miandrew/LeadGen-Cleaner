@@ -58,6 +58,7 @@ export default async function AdminPage() {
             { href: '/admin/companies', label: 'Companies' },
             { href: '/admin/leads', label: 'Leads' },
             { href: '/admin/revenue', label: 'Revenue' },
+            { href: '/admin/booked', label: 'Booked Calls' },
           ].map((l) => (
             <Link key={l.href} href={l.href} className="text-blue-200 hover:text-white transition-colors">{l.label}</Link>
           ))}

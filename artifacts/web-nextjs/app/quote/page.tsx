@@ -21,6 +21,9 @@ function QuoteContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const companyIds = (searchParams.get('companies') || '').split(',').filter(Boolean)
+  const prefillCity = searchParams.get('city') || ''
+  const prefillState = searchParams.get('state') || ''
+  const prefillService = searchParams.get('service') || ''
 
   const [step, setStep] = useState(1)
   const [companies, setCompanies] = useState<Company[]>([])
@@ -28,12 +31,12 @@ function QuoteContent() {
   const [error, setError] = useState('')
 
   const [form, setForm] = useState({
-    service_type: '',
+    service_type: prefillService,
     building_type: '',
     building_size: '',
     frequency: '',
-    city: '',
-    state: '',
+    city: prefillCity,
+    state: prefillState,
     contact_name: '',
     business_name: '',
     contact_email: '',

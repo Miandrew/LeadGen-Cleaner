@@ -1,24 +1,24 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 
-export default function ClaimSearchPage() {
+function ClaimSearchContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<{ id: string; name: string; city: string; state: string; slug: string }[]>([])
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
 
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault()
-    if (!query.trim()) return
+  async function runSearch(q: string) {
+    if (!q.trim()) return
     setLoading(true)
     setSearched(true)
     try {
-      const res = await fetch(`/api/company-by-slug?q=${encodeURIComponent(query)}`)
+      const res = await fetch(`/api/company-by-slug?q=${encodeURIComponent(q)}`)
       if (res.ok) {
         const data = await res.json()
         setResults(Array.isArray(data) ? data : data ? [data] : [])
@@ -29,6 +29,19 @@ export default function ClaimSearchPage() {
       setResults([])
     }
     setLoading(false)
+  }
+
+  useEffect(() => {
+    const q = searchParams.get('q')
+    if (q) {
+      setQuery(q)
+      runSearch(q)
+    }
+  }, [searchParams])
+
+  async function handleSearch(e: React.FormEvent) {
+    e.preventDefault()
+    await runSearch(query)
   }
 
   return (
@@ -115,5 +128,13 @@ export default function ClaimSearchPage() {
       </main>
       <Footer />
     </div>
+  )
+}
+
+export default function ClaimSearchPage() {
+  return (
+    <Suspense>
+      <ClaimSearchContent />
+    </Suspense>
   )
 }

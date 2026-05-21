@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic'
+export const revalidate = 86400
 
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -100,6 +100,50 @@ function parseCityState(location: string): { city: string; state: string } {
   const state = parts[parts.length - 1].toUpperCase()
   const city = parts.slice(0, -1).join(' ').replace(/\b\w/g, (c) => c.toUpperCase())
   return { city, state }
+}
+
+export async function generateStaticParams() {
+  const params: { service: string; location: string }[] = []
+
+  for (const service of SERVICE_TYPES) {
+    for (const state of US_STATES) {
+      params.push({
+        service: service.value,
+        location: state.name.toLowerCase().replace(/\s+/g, '-'),
+      })
+    }
+  }
+
+  try {
+    const { data } = await supabaseAdmin
+      .from('companies')
+      .select('city, state, services')
+      .eq('active', true)
+      .not('city', 'is', null)
+      .limit(3000)
+
+    const seen = new Set<string>()
+    let count = 0
+
+    for (const company of (data || []) as { city: string | null; state: string | null; services: string[] | null }[]) {
+      if (!company.city || !company.state) continue
+      for (const svc of company.services || []) {
+        const match = SERVICE_TYPES.find((s) => s.value === svc)
+        if (!match) continue
+        const citySlug = `${company.city.toLowerCase().replace(/\s+/g, '-')}-${company.state.toLowerCase()}`
+        const key = `${svc}:${citySlug}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          params.push({ service: svc, location: citySlug })
+          count++
+        }
+        if (count >= 1000) break
+      }
+      if (count >= 1000) break
+    }
+  } catch {}
+
+  return params
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -221,7 +265,19 @@ export default async function ServiceLocationPage({ params }: Props) {
                 </div>
               </div>
             )}
-            <PseoCompanyGrid companies={companies as Parameters<typeof PseoCompanyGrid>[0]['companies']} />
+            <PseoCompanyGrid
+              companies={companies as Parameters<typeof PseoCompanyGrid>[0]['companies']}
+              state={code}
+              service={serviceKey}
+            />
+            <div className="mt-6 text-sm text-center text-gray-500">
+              <Link
+                href={`/commercial-cleaning/${params.location}`}
+                className="text-accent hover:underline"
+              >
+                Browse all cleaning companies in {stateName} →
+              </Link>
+            </div>
             {serviceKey && code && (
               <InternalLinks
                 serviceValue={serviceKey}
@@ -267,7 +323,20 @@ export default async function ServiceLocationPage({ params }: Props) {
             </div>
           </div>
           <div className="max-w-5xl mx-auto px-4 py-8">
-            <PseoCompanyGrid companies={companies as Parameters<typeof PseoCompanyGrid>[0]['companies']} />
+            <PseoCompanyGrid
+              companies={companies as Parameters<typeof PseoCompanyGrid>[0]['companies']}
+              city={city}
+              state={state}
+              service={serviceKey}
+            />
+            <div className="mt-6 text-sm text-center text-gray-500">
+              <Link
+                href={`/commercial-cleaning/${params.location}`}
+                className="text-accent hover:underline"
+              >
+                Browse all cleaning companies in {city}, {stateName} →
+              </Link>
+            </div>
             {serviceKey && (
               <InternalLinks
                 serviceValue={serviceKey}

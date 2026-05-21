@@ -1,4 +1,4 @@
-export const dynamic = 'force-dynamic'
+export const revalidate = 86400
 
 import type { Metadata } from 'next'
 import Link from 'next/link'
@@ -55,9 +55,36 @@ function parseRating(raw?: string): number {
 }
 
 export async function generateStaticParams() {
-  return US_STATES.map((s) => ({
+  const stateParams = US_STATES.map((s) => ({
     location: s.name.toLowerCase().replace(/\s+/g, '-'),
   }))
+
+  try {
+    const { data } = await supabaseAdmin
+      .from('companies')
+      .select('city, state')
+      .eq('active', true)
+      .not('city', 'is', null)
+      .not('state', 'is', null)
+      .limit(2000)
+
+    const seen = new Set<string>()
+    const cityParams: { location: string }[] = []
+
+    for (const c of (data || []) as { city: string | null; state: string | null }[]) {
+      if (!c.city || !c.state) continue
+      const slug = `${c.city.toLowerCase().replace(/\s+/g, '-')}-${c.state.toLowerCase()}`
+      if (!seen.has(slug)) {
+        seen.add(slug)
+        cityParams.push({ location: slug })
+      }
+      if (cityParams.length >= 500) break
+    }
+
+    return [...stateParams, ...cityParams]
+  } catch {
+    return stateParams
+  }
 }
 
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
@@ -114,7 +141,6 @@ export default async function CommercialCleaningLocationPage({ params, searchPar
     companies = res.data || []
     count = res.count || 0
 
-    // Chips: cities for state page, related cities for city page
     let chipsQ = supabaseAdmin
       .from('companies')
       .select('city')
@@ -138,7 +164,6 @@ export default async function CommercialCleaningLocationPage({ params, searchPar
     }
   }
 
-  const baseLocation = isState ? location : location
   const headline = service
     ? isState
       ? `${service.label} Companies in ${stateName}`
@@ -177,7 +202,6 @@ export default async function CommercialCleaningLocationPage({ params, searchPar
     ],
   }
 
-  // Build "active filter" pill labels
   const activePills: { label: string; clearHref: string }[] = []
   const buildClearHref = (drop: 'service' | 'rating' | 'verified') => {
     const params = new URLSearchParams()
@@ -231,7 +255,6 @@ export default async function CommercialCleaningLocationPage({ params, searchPar
 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="flex flex-col lg:flex-row gap-8">
-            {/* Sidebar */}
             <aside className="lg:w-60 flex-shrink-0">
               <LocationFilters
                 currentLocation={location}
@@ -243,7 +266,6 @@ export default async function CommercialCleaningLocationPage({ params, searchPar
               />
             </aside>
 
-            {/* Results */}
             <div className="flex-1 min-w-0">
               {activePills.length > 0 && (
                 <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -311,8 +333,30 @@ export default async function CommercialCleaningLocationPage({ params, searchPar
               ) : (
                 <PseoCompanyGrid
                   companies={companies as Parameters<typeof PseoCompanyGrid>[0]['companies']}
+                  city={city || undefined}
+                  state={stateCode}
+                  service={service?.value}
                 />
               )}
+
+              {/* Browse by service in this location */}
+              <div className="mt-10 bg-white border border-gray-200 rounded-xl p-6">
+                <h2 className="text-lg font-bold text-navy mb-1">Browse by Service Type</h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  Find specific cleaning services in {city || stateName}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {SERVICE_TYPES.map((s) => (
+                    <Link
+                      key={s.value}
+                      href={`/service/${s.value}/${location}`}
+                      className="text-sm px-3 py-1.5 bg-blue-50 text-accent rounded-full hover:bg-blue-100 transition-colors"
+                    >
+                      {s.label}
+                    </Link>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>

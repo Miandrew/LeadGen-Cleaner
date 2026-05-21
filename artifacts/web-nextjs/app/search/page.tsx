@@ -306,7 +306,13 @@ function SearchContent() {
       <SelectionBar
         selectedCount={selectedIds.length}
         onRequestQuotes={() =>
-          router.push(`/quote?companies=${selectedIds.join(',')}`)
+          {
+            const qs = new URLSearchParams({ companies: selectedIds.join(',') })
+            if (city) qs.set('city', city)
+            if (state) qs.set('state', state)
+            if (service) qs.set('service', service)
+            router.push(`/quote?${qs.toString()}`)
+          }
         }
       />
 

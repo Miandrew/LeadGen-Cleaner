@@ -11,15 +11,40 @@ interface Props {
 export default async function LeadUnlockedPage({ params }: Props) {
   const { lead_id, company_id } = params
 
-  const { data: purchase } = await supabaseAdmin
-    .from('lead_purchases')
-    .select('*')
-    .eq('lead_id', lead_id)
-    .eq('company_id', company_id)
-    .single()
+  // Poll for purchase — webhook may arrive after success_url redirect
+  let purchase = null
+  for (let i = 0; i < 6; i++) {
+    const { data } = await supabaseAdmin
+      .from('lead_purchases')
+      .select('*')
+      .eq('lead_id', lead_id)
+      .eq('company_id', company_id)
+      .single()
+
+    if (data) { purchase = data; break }
+    if (i < 5) await new Promise((r) => setTimeout(r, 1500))
+  }
 
   if (!purchase) {
-    redirect(`/unlock-lead/${lead_id}/${company_id}`)
+    return (
+      <div className="min-h-screen flex flex-col bg-gray-50">
+        <Header />
+        <main className="flex-1 flex items-center justify-center px-4">
+          <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md text-center">
+            <div className="text-4xl mb-4">⏳</div>
+            <h1 className="text-xl font-bold text-gray-900 mb-2">
+              Payment received — loading your contact...
+            </h1>
+            <p className="text-gray-500 text-sm mb-4">
+              This takes a few seconds. Refresh this page if it doesn&apos;t update.
+            </p>
+            <a href="" className="text-accent text-sm font-medium hover:underline">
+              Refresh →
+            </a>
+          </div>
+        </main>
+      </div>
+    )
   }
 
   const { data: lead } = await supabaseAdmin.from('leads').select('*').eq('id', lead_id).single()

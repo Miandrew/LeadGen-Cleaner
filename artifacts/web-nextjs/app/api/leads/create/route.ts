@@ -29,22 +29,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, duplicate: true })
     }
 
-    const lead_type =
-      selected_company_ids.length === 1 ? 'exclusive' :
-      selected_company_ids.length === 2 ? 'semi-exclusive' : 'shared'
-
-    const priceDisplay =
-      selected_company_ids.length === 1 ? '$45' :
-      selected_company_ids.length === 2 ? '$35' : '$25'
-
-    const leadTypeLabel = lead_type.charAt(0).toUpperCase() + lead_type.slice(1)
-
     const { data: lead, error: insertError } = await supabaseAdmin
       .from('leads')
       .insert({
         service_type, city, state, contact_name, contact_email,
         contact_phone, business_name, building_type, building_size,
-        frequency, message, selected_company_ids, status: 'open', lead_type,
+        frequency, message, selected_company_ids, status: 'open',
       })
       .select()
       .single()
@@ -79,7 +69,7 @@ export async function POST(req: NextRequest) {
           } else {
             await sendEmail(
               company.email,
-              `New ${leadTypeLabel} Lead Delivered — ${service_type} in ${city}`,
+              `New Lead Delivered — ${service_type} in ${city}`,
               `<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
                 <h2>New Lead — Contact Details Included</h2>
                 <p><strong>Service:</strong> ${service_type}</p>
@@ -101,11 +91,10 @@ export async function POST(req: NextRequest) {
           const unlockUrl = `${siteUrl}/unlock-lead/${lead.id}/${company.id}`
           await sendEmail(
             company.email,
-            `New ${leadTypeLabel} Lead — ${service_type} in ${city}, ${state}`,
+            `New Lead — ${service_type} in ${city}, ${state}`,
             `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px">
               <h2 style="color:#1B3A6B">You have a new lead on CommercialCleaningNearMe.com</h2>
               <div style="background:#f9f9f9;padding:16px;border-radius:8px;margin:16px 0">
-                <p><strong>Lead Type:</strong> ${leadTypeLabel} (sent to ${selected_company_ids.length} ${selected_company_ids.length === 1 ? 'company' : 'companies'})</p>
                 <p><strong>Location:</strong> ${city}, ${state}</p>
                 <p><strong>Service:</strong> ${service_type}</p>
                 <p><strong>Building Type:</strong> ${building_type}</p>
@@ -113,7 +102,7 @@ export async function POST(req: NextRequest) {
                 <p><strong>Frequency:</strong> ${frequency}</p>
               </div>
               <a href="${unlockUrl}" style="display:inline-block;background:#1B3A6B;color:white;padding:14px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin:16px 0">
-                Unlock Full Contact Details — ${priceDisplay}
+                Unlock Full Contact Details — $35
               </a>
               <p style="color:#999;font-size:12px">Lead expires in 72 hours.</p>
             </div>`
@@ -123,9 +112,8 @@ export async function POST(req: NextRequest) {
 
       sendEmail(
         process.env.ADMIN_EMAIL!,
-        `New ${leadTypeLabel} Lead — ${service_type} in ${city} ${state}`,
-        `<p><strong>Lead Type:</strong> ${leadTypeLabel}</p>
-         <p><strong>Service:</strong> ${service_type}</p>
+        `New Lead — ${service_type} in ${city} ${state}`,
+        `<p><strong>Service:</strong> ${service_type}</p>
          <p><strong>Location:</strong> ${city}, ${state}</p>
          <p><strong>Contact:</strong> ${contact_name} | ${contact_email} | ${contact_phone}</p>
          <p><strong>Business:</strong> ${business_name}</p>

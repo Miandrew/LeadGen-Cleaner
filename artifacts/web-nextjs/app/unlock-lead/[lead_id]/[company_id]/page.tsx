@@ -9,12 +9,6 @@ interface Props {
   params: { lead_id: string; company_id: string }
 }
 
-const PRICE_MAP: Record<string, { display: string; cents: number; label: string }> = {
-  exclusive:       { display: '$45', cents: 4500, label: 'Exclusive' },
-  'semi-exclusive':{ display: '$35', cents: 3500, label: 'Semi-Exclusive' },
-  shared:          { display: '$25', cents: 2500, label: 'Shared' },
-}
-
 export default async function UnlockLeadPage({ params }: Props) {
   const { lead_id, company_id } = params
 
@@ -77,8 +71,6 @@ export default async function UnlockLeadPage({ params }: Props) {
     )
   }
 
-  const leadType = (lead.lead_type as string) || 'shared'
-  const pricing = PRICE_MAP[leadType] || PRICE_MAP['shared']
   const totalCompanies = lead.selected_company_ids?.length || 1
 
   return (
@@ -98,14 +90,6 @@ export default async function UnlockLeadPage({ params }: Props) {
               <div className="flex justify-between"><span className="text-gray-500">Building Size</span><span className="font-medium">{lead.building_size}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Frequency</span><span className="font-medium">{lead.frequency}</span></div>
               <div className="flex justify-between"><span className="text-gray-500">Submitted</span><span className="font-medium">{getRelativeTime(lead.created_at)}</span></div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Lead Type</span>
-                <span className={`font-semibold text-xs px-2 py-0.5 rounded-full ${
-                  leadType === 'exclusive' ? 'bg-green-100 text-green-700' :
-                  leadType === 'semi-exclusive' ? 'bg-blue-100 text-blue-700' :
-                  'bg-gray-100 text-gray-600'
-                }`}>{pricing.label}</span>
-              </div>
             </div>
           </div>
 
@@ -131,9 +115,9 @@ export default async function UnlockLeadPage({ params }: Props) {
           </div>
 
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 text-center">
-            <div className="text-3xl font-bold text-navy mb-1">{pricing.display}</div>
-            <p className="text-gray-500 text-sm mb-4">One-time payment · {pricing.label} lead</p>
-            <UnlockButton leadId={lead_id} companyId={company_id} leadType={leadType} priceDisplay={pricing.display} />
+            <div className="text-3xl font-bold text-navy mb-1">$35</div>
+            <p className="text-gray-500 text-sm mb-4">One-time payment</p>
+            <UnlockButton leadId={lead_id} companyId={company_id} />
           </div>
         </div>
       </main>

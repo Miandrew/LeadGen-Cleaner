@@ -22,9 +22,12 @@ interface Company {
 
 interface Props {
   companies: Company[]
+  city?: string
+  state?: string
+  service?: string
 }
 
-export default function PseoCompanyGrid({ companies }: Props) {
+export default function PseoCompanyGrid({ companies, city, state, service }: Props) {
   const router = useRouter()
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [toast, setToast] = useState('')
@@ -39,6 +42,15 @@ export default function PseoCompanyGrid({ companies }: Props) {
       }
       return [...prev, id]
     })
+  }
+
+  const handleRequestQuotes = () => {
+    const qs = new URLSearchParams()
+    qs.set('companies', selectedIds.join(','))
+    if (city) qs.set('city', city)
+    if (state) qs.set('state', state)
+    if (service) qs.set('service', service)
+    router.push(`/quote?${qs.toString()}`)
   }
 
   if (companies.length === 0) {
@@ -65,7 +77,7 @@ export default function PseoCompanyGrid({ companies }: Props) {
 
       <SelectionBar
         selectedCount={selectedIds.length}
-        onRequestQuotes={() => router.push(`/quote?companies=${selectedIds.join(',')}`)}
+        onRequestQuotes={handleRequestQuotes}
       />
 
       {toast && (

@@ -5,6 +5,8 @@ import Footer from '@/components/Footer'
 import SearchForm from '@/components/SearchForm'
 import { SERVICE_TYPES, FULL_STATE_NAMES } from '@/lib/utils'
 
+export const revalidate = 3600
+
 async function getStats() {
   try {
     const { data: serviceCounts } = await supabaseAdmin
@@ -34,9 +36,16 @@ async function getStats() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
 
-    return { serviceMap, topStates }
+    const { count: totalCompanies } = await supabaseAdmin
+      .from('companies')
+      .select('*', { count: 'exact', head: true })
+      .eq('active', true)
+
+    const uniqueStateCount = Object.keys(stateMap).length
+
+    return { serviceMap, topStates, totalCompanies: totalCompanies || 0, uniqueStateCount }
   } catch {
-    return { serviceMap: {} as Record<string, number>, topStates: [] }
+    return { serviceMap: {} as Record<string, number>, topStates: [], totalCompanies: 0, uniqueStateCount: 0 }
   }
 }
 
@@ -52,7 +61,14 @@ const serviceIcons: Record<string, string> = {
 }
 
 export default async function HomePage() {
-  const { serviceMap, topStates } = await getStats()
+  const { serviceMap, topStates, totalCompanies, uniqueStateCount } = await getStats()
+
+  const trustItems = [
+    `${(totalCompanies || 0).toLocaleString()}+ Companies Listed`,
+    `${uniqueStateCount || 50} States Covered`,
+    'Real Google Reviews',
+    'Free to Search',
+  ]
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -66,21 +82,19 @@ export default async function HomePage() {
               Find Trusted Commercial Cleaning Companies Near You
             </h1>
             <p className="text-lg text-gray-500 mb-8 max-w-2xl mx-auto">
-              Browse 5,000+ commercial cleaning companies across the US. Compare
+              Browse {totalCompanies > 0 ? `${totalCompanies.toLocaleString()}+ ` : ''}commercial cleaning companies across the US. Compare
               services, read real reviews, and request free quotes.
             </p>
 
             <SearchForm />
 
             <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-gray-400">
-              {['5,600+ Companies Listed', '36 States Covered', 'Real Google Reviews', 'Free to Search'].map(
-                (item, i, arr) => (
-                  <span key={item} className="flex items-center gap-4">
-                    {item}
-                    {i < arr.length - 1 && <span className="hidden sm:inline text-gray-300">|</span>}
-                  </span>
-                )
-              )}
+              {trustItems.map((item, i, arr) => (
+                <span key={item} className="flex items-center gap-4">
+                  {item}
+                  {i < arr.length - 1 && <span className="hidden sm:inline text-gray-300">|</span>}
+                </span>
+              ))}
             </div>
           </div>
         </section>
@@ -144,7 +158,7 @@ export default async function HomePage() {
               {SERVICE_TYPES.map((service) => (
                 <Link
                   key={service.value}
-                  href={`/search?service=${encodeURIComponent(service.value)}`}
+                  href={`/service/${service.value}`}
                   className="bg-white border border-gray-200 rounded-xl p-5 hover:border-accent hover:shadow-md transition-all flex flex-col items-center text-center group"
                 >
                   <span className="text-3xl mb-2">{serviceIcons[service.label] || '🧽'}</span>
@@ -186,17 +200,17 @@ export default async function HomePage() {
         <section className="py-16 bg-[#1B3A6B] text-white">
           <div className="max-w-3xl mx-auto px-4 text-center">
             <h2 className="text-2xl sm:text-3xl font-bold mb-4">
-              Are You a Commercial Cleaning Company?
+              Own a Commercial Cleaning Company?
             </h2>
             <p className="text-blue-200 mb-8">
-              Claim your free listing today and start receiving quote requests from facility managers
-              in your area.
+              Facility managers in your city are actively searching for commercial cleaners right now.
+              Claim your free listing and start receiving quote requests — no monthly fee to get started.
             </p>
             <Link
               href="/claim"
               className="inline-block bg-white text-navy font-bold px-8 py-3 rounded-lg hover:bg-gray-100 transition-colors"
             >
-              Claim Your Listing — Free
+              Claim Your Free Listing →
             </Link>
           </div>
         </section>
@@ -206,4 +220,3 @@ export default async function HomePage() {
     </div>
   )
 }
-

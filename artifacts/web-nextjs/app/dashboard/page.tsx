@@ -97,17 +97,23 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        {[
-          { label: 'Leads in Your City', value: availableLeads ?? 0, sub: 'in the last 72h' },
-          { label: 'Leads Purchased', value: purchasedLeads ?? 0, sub: 'all time' },
-          { label: 'Subscription', value: user.subscription_tier ? user.subscription_tier.charAt(0).toUpperCase() + user.subscription_tier.slice(1) : 'No Plan', sub: user.subscription_status || '' },
-        ].map((stat) => (
-          <div key={stat.label} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-            <div className="text-sm text-gray-500 mb-1">{stat.label}</div>
-            <div className="text-3xl font-bold text-navy">{stat.value}</div>
-            <div className="text-xs text-gray-400 mt-0.5">{stat.sub}</div>
+        <Link href="/dashboard/leads" className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 hover:shadow-md transition-shadow">
+          <div className="text-sm text-gray-500 mb-1">Leads Available Near You</div>
+          <div className="text-3xl font-bold text-navy">{availableLeads ?? 0}</div>
+          <div className="text-xs text-accent mt-2 font-medium">View leads →</div>
+        </Link>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <div className="text-sm text-gray-500 mb-1">Leads Purchased</div>
+          <div className="text-3xl font-bold text-navy">{purchasedLeads ?? 0}</div>
+          <div className="text-xs text-gray-400 mt-0.5">all time</div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+          <div className="text-sm text-gray-500 mb-1">Subscription</div>
+          <div className="text-3xl font-bold text-navy">
+            {user.subscription_tier ? user.subscription_tier.charAt(0).toUpperCase() + user.subscription_tier.slice(1) : 'No Plan'}
           </div>
-        ))}
+          <div className="text-xs text-gray-400 mt-0.5">{user.subscription_status || ''}</div>
+        </div>
       </div>
 
       {recentPurchases && recentPurchases.length > 0 && (

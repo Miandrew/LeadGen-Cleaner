@@ -6,9 +6,29 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const {
-      company_id, full_name, email, password, phone, role,
+      company_id, slug, full_name, email, password, phone, role,
       how_getting_clients, biggest_challenge, new_clients_per_month, marketing_budget,
     } = body
+
+    if (!company_id || !slug || !email || !password) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    const { data: targetCompany, error: targetErr } = await supabaseAdmin
+      .from('companies')
+      .select('id, slug, claimed, name, city, state')
+      .eq('id', company_id)
+      .single()
+
+    if (targetErr || !targetCompany) {
+      return NextResponse.json({ error: 'Company not found' }, { status: 404 })
+    }
+    if (targetCompany.slug !== slug) {
+      return NextResponse.json({ error: 'Company/slug mismatch' }, { status: 400 })
+    }
+    if (targetCompany.claimed) {
+      return NextResponse.json({ error: 'This listing has already been claimed' }, { status: 409 })
+    }
 
     const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -110,6 +130,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       session: signInData.session,
+      segment,
+      company: company ? { name: company.name, city: company.city } : null,
     })
   } catch (err) {
     console.error('Claim error:', err)

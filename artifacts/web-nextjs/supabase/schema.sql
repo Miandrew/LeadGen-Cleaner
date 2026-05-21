@@ -105,9 +105,11 @@ CREATE TABLE IF NOT EXISTS leads (
   message               text,
   selected_company_ids  uuid[],
   status                text DEFAULT 'open',
-  lead_type             text, -- 'exclusive' | 'semi-exclusive' | 'shared'
   created_at            timestamp DEFAULT now()
 );
+
+-- Migration: drop lead_type column if present (flat $35 pricing model)
+-- ALTER TABLE leads DROP COLUMN IF EXISTS lead_type;
 
 -- ─── Lead Purchases ─────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS lead_purchases (
@@ -193,3 +195,20 @@ BEGIN
   END IF;
 END;
 $$ LANGUAGE plpgsql;
+
+-- ─── Call Routing Responses (Document 6) ────────────────────────────────────
+CREATE TABLE IF NOT EXISTS call_routing_responses (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id      uuid REFERENCES companies(id),
+  email           text,
+  full_name       text,
+  segment         text,
+  action          text,       -- 'booked' | 'declined' | 'skipped'
+  booking_time    timestamp,  -- when the Calendly slot was scheduled for
+  calendly_url    text,
+  notes           text,
+  created_at      timestamp DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS call_routing_company_idx ON call_routing_responses(company_id);
+CREATE INDEX IF NOT EXISTS call_routing_segment_idx ON call_routing_responses(segment);
+CREATE INDEX IF NOT EXISTS call_routing_action_idx  ON call_routing_responses(action);

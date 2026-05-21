@@ -169,6 +169,17 @@ export default async function CompanyPage({ params }: Props) {
             </div>
           </div>
 
+          <div className="bg-accent rounded-xl p-6 text-white">
+            <h2 className="text-lg font-bold mb-1">Request a Free Quote from {company.name}</h2>
+            <p className="text-blue-100 text-sm mb-4">Get a response within 24 hours. No obligation.</p>
+            <Link
+              href={`/quote?companies=${company.id}${company.city ? `&city=${encodeURIComponent(company.city)}` : ''}${company.state ? `&state=${company.state}` : ''}`}
+              className="inline-block bg-white text-accent font-semibold px-5 py-2.5 rounded-lg text-sm hover:bg-blue-50 transition-colors"
+            >
+              Request Free Quote →
+            </Link>
+          </div>
+
           {images.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
               <h2 className="text-lg font-bold text-navy mb-4">Photos</h2>
@@ -189,14 +200,6 @@ export default async function CompanyPage({ params }: Props) {
               {company.employee_count && <div className="flex items-center gap-2"><span className="font-medium text-gray-900">Team Size:</span> {company.employee_count}</div>}
               {company.address && <div className="flex items-center gap-2"><span className="font-medium text-gray-900">Address:</span> {company.address}</div>}
             </div>
-          </div>
-
-          <div className="bg-accent rounded-xl p-6 text-white">
-            <h2 className="text-lg font-bold mb-1">Request a Free Quote from {company.name}</h2>
-            <p className="text-blue-100 text-sm mb-4">Get a response within 24 hours.</p>
-            <Link href={`/quote?companies=${company.id}`} className="inline-block bg-white text-accent font-semibold px-5 py-2.5 rounded-lg text-sm hover:bg-blue-50 transition-colors">
-              Request Quote
-            </Link>
           </div>
 
           {company.address && (

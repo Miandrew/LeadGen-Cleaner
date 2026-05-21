@@ -18,9 +18,6 @@ export default function SelectionBar({ selectedCount, onRequestQuotes }: Selecti
             <span className="font-semibold text-navy text-sm sm:text-base">
               {selectedCount} {selectedCount === 1 ? 'company' : 'companies'} selected
             </span>
-            <span className="text-gray-500 text-sm ml-2 hidden sm:inline">
-              — $35 each to unlock
-            </span>
           </div>
           <button
             onClick={onRequestQuotes}

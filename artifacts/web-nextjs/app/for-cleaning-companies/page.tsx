@@ -1,6 +1,9 @@
 import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
+import { supabaseAdmin } from '@/lib/supabase'
+
+export const revalidate = 3600
 
 const PLANS = [
   {
@@ -82,25 +85,24 @@ const HOW_IT_WORKS = [
   },
 ]
 
-const TESTIMONIALS = [
-  {
-    quote: 'We picked up a $3,200/month janitorial contract from our first lead. The ROI is incredible.',
-    name: 'Marcus T.',
-    company: 'Chicago Facility Services',
-  },
-  {
-    quote: 'The Growth plan pays for itself with one contract. We\'ve won 4 long-term clients in 3 months.',
-    name: 'Sandra R.',
-    company: 'Lone Star Commercial Cleaning, Houston',
-  },
-  {
-    quote: 'Finally a lead gen service that actually understands the commercial cleaning industry.',
-    name: 'Kevin P.',
-    company: 'Pacific Northwest Facility Services',
-  },
-]
+async function getStats() {
+  try {
+    const [{ count }, { data: states }] = await Promise.all([
+      supabaseAdmin.from('companies').select('*', { count: 'exact', head: true }).eq('active', true),
+      supabaseAdmin.from('companies').select('state').eq('active', true).not('state', 'is', null),
+    ])
+    const uniqueStates = new Set((states || []).map((s: { state: string }) => s.state)).size
+    return { companyCount: count || 0, stateCount: uniqueStates }
+  } catch {
+    return { companyCount: 4700, stateCount: 36 }
+  }
+}
 
-export default function ForCleaningCompaniesPage() {
+export default async function ForCleaningCompaniesPage() {
+  const { companyCount, stateCount } = await getStats()
+  const companyCountLabel = companyCount >= 1000
+    ? `${Math.floor(companyCount / 100) / 10}K+`
+    : `${companyCount}+`
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -140,9 +142,9 @@ export default function ForCleaningCompaniesPage() {
       <section className="bg-white border-b border-gray-200 py-6 px-4">
         <div className="max-w-4xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
           {[
-            { value: '10,000+', label: 'Companies Listed' },
-            { value: 'All 50', label: 'States Covered' },
-            { value: 'From $25', label: 'Per Lead Unlock' },
+            { value: companyCountLabel, label: 'Companies Listed' },
+            { value: `${stateCount} States`, label: 'Coverage Today' },
+            { value: '$35', label: 'Flat Per Lead' },
             { value: '100%', label: 'Contract Value Yours' },
           ].map((s) => (
             <div key={s.label}>
@@ -223,25 +225,35 @@ export default function ForCleaningCompaniesPage() {
         </div>
       </section>
 
-      {/* Testimonials */}
+      {/* Why It Works */}
       <section className="py-20 px-4 bg-gray-50">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-bold text-navy text-center mb-12">What Cleaning Companies Say</h2>
+          <h2 className="text-3xl font-bold text-navy text-center mb-3">Why Our Directory Works</h2>
+          <p className="text-gray-500 text-center mb-12 max-w-2xl mx-auto">
+            We&apos;re built specifically for commercial cleaning — not a generic home services marketplace.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {TESTIMONIALS.map((t) => (
-              <div key={t.name} className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-                <div className="flex mb-3">
-                  {[...Array(5)].map((_, i) => (
-                    <svg key={i} className="w-4 h-4 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                    </svg>
-                  ))}
-                </div>
-                <p className="text-gray-700 text-sm leading-relaxed mb-4">&ldquo;{t.quote}&rdquo;</p>
-                <div>
-                  <p className="font-semibold text-gray-900 text-sm">{t.name}</p>
-                  <p className="text-gray-400 text-xs">{t.company}</p>
-                </div>
+            {[
+              {
+                icon: '🎯',
+                title: 'B2B Leads Only',
+                desc: 'Every quote request is from a facility manager, property manager, or business owner — never residential. You get qualified commercial prospects only.',
+              },
+              {
+                icon: '🔒',
+                title: 'Pay Only For Real Leads',
+                desc: 'No setup fees, no monthly commitment on pay-per-lead. You see service type, building size, and frequency before deciding whether to unlock.',
+              },
+              {
+                icon: '⚡',
+                title: 'Built For Speed',
+                desc: 'Subscriber plans include automated SMS follow-up within 2 minutes — research shows responding in the first 5 minutes increases your close rate by up to 9×.',
+              },
+            ].map((item) => (
+              <div key={item.title} className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                <div className="text-4xl mb-3">{item.icon}</div>
+                <h3 className="font-bold text-navy mb-2">{item.title}</h3>
+                <p className="text-gray-500 text-sm leading-relaxed">{item.desc}</p>
               </div>
             ))}
           </div>
@@ -260,11 +272,11 @@ export default function ForCleaningCompaniesPage() {
               },
               {
                 q: 'How does lead pricing work?',
-                a: 'Lead price depends on exclusivity. Exclusive leads (sent to only your company) are $45. Semi-exclusive leads (max 2 companies) are $35. Shared leads (up to 3 companies) are $25. Subscribers receive leads automatically based on their plan.',
+                a: 'A flat $35 per lead — every lead, every time. No tiers, no surprises. Facility managers can request quotes from up to 3 companies per lead. Subscribers receive leads automatically as part of their monthly plan.',
               },
               {
                 q: 'Do I compete with other cleaning companies for the same lead?',
-                a: 'It depends on the lead type. Exclusive leads go to you only. Semi-exclusive leads go to you and one other company. Shared leads go to up to 3 companies. You\'ll know the type before you pay.',
+                a: 'A facility manager can select up to 3 companies per quote request. Your speed of response makes a huge difference — subscriber plans automate SMS follow-up within 2 minutes so you reach prospects first.',
               },
               {
                 q: 'What if I\'m not listed in the directory yet?',

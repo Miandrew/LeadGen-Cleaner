@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   try {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session
-      const { lead_id, company_id, lead_type } = session.metadata || {}
+      const { lead_id, company_id } = session.metadata || {}
 
       if (lead_id && company_id && session.mode === 'payment') {
         await supabaseAdmin.from('lead_purchases').upsert(
@@ -47,8 +47,8 @@ export async function POST(req: NextRequest) {
 
         await sendEmail(
           process.env.ADMIN_EMAIL!,
-          `Lead purchased — $${((session.amount_total || 3500) / 100).toFixed(2)} (${lead_type || 'shared'})`,
-          `<p>Company ${company?.name} purchased lead ${lead_id} (${lead_type || 'shared'}) for $${((session.amount_total || 3500) / 100).toFixed(2)}.</p>`
+          `Lead purchased — $${((session.amount_total || 3500) / 100).toFixed(2)}`,
+          `<p>Company ${company?.name} purchased lead ${lead_id} for $${((session.amount_total || 3500) / 100).toFixed(2)}.</p>`
         )
       }
 
@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
           })
         } else {
           // Standard subscription tier
-          const leadsMap: Record<string, number> = { essentials: 5, growth: 10, starter: 3, unlimited: 999 }
+          const leadsMap: Record<string, number> = { essentials: 5, growth: 999 }
           await supabaseAdmin.from('users').update({
             subscription_status: 'active',
             subscription_tier: tier,
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
       if (company_id) {
         const priceId = sub.items.data[0]?.price?.id
         const tier = getPlanTier(priceId)
-        const leadsMap: Record<string, number> = { essentials: 5, growth: 10, starter: 3, unlimited: 999 }
+        const leadsMap: Record<string, number> = { essentials: 5, growth: 999 }
         await supabaseAdmin.from('users').update({
           subscription_status: 'active',
           subscription_tier: tier,
@@ -147,7 +147,5 @@ export async function POST(req: NextRequest) {
 function getPlanTier(priceId: string | undefined): string {
   if (priceId === process.env.STRIPE_ESSENTIALS_PRICE_ID) return 'essentials'
   if (priceId === process.env.STRIPE_GROWTH_PRICE_ID) return 'growth'
-  if (priceId === process.env.STRIPE_STARTER_PRICE_ID) return 'starter'
-  if (priceId === process.env.STRIPE_UNLIMITED_PRICE_ID) return 'unlimited'
   return 'essentials'
 }
