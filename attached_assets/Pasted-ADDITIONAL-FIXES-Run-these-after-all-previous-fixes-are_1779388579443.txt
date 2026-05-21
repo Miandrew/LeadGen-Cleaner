@@ -1,0 +1,709 @@
+ADDITIONAL FIXES — Run these after all previous fixes are complete.
+Work in exact order. Test each before moving to the next.
+
+===================================================================
+Fix A — Remove ALL tiered pricing. Flat $35 everywhere, no exceptions.
+===================================================================
+
+The business decision is flat $35 per lead for all non-subscribers.
+Remove every reference to $45, $25, exclusive, semi-exclusive, shared 
+pricing tiers. Here is exactly where to fix in the actual code:
+
+1. In app/api/create-checkout-session/route.ts:
+   - unit_amount is already 3500 — KEEP IT
+   - Remove lead_type from the request body entirely
+   - Product name should just be: 'Lead Contact Details — $35'
+   - Remove any priceMap logic if added by previous prompt
+
+2. In app/api/leads/create/route.ts:
+   - The email button already says 'Unlock Full Contact Details — $35' 
+     — this is CORRECT, keep it
+   - Do NOT add any lead_type calculation or priceMap
+   - The email subject is currently 'New Lead — [service] in [city], 
+     [state]' — keep this, do not add lead_type to subject
+
+3. In components/SelectionBar.tsx:
+   The current code already shows '— $35 each to unlock' in the bar.
+   This is correct. But the text says '[X] companies selected — $35 each 
+   to unlock'. Remove the '— $35 each to unlock' part entirely — the 
+   facility manager should never see pricing. Replace with just:
+   '[X] company selected' or '[X] companies selected'
+   The button text should stay: 'Request Quotes →'
+
+4. In the leads table schema — do NOT add a lead_type column.
+   The flat pricing model makes this column unnecessary. Skip Fix 1 
+   from the previous prompt entirely. If it was already applied, 
+   run this migration:
+   ALTER TABLE leads DROP COLUMN IF EXISTS lead_type;
+
+5. In app/unlock-lead/[lead_id]/[company_id]/page.tsx:
+   Find where the price is displayed on the unlock page.
+   It should always show $35. Remove any conditional price logic.
+   The UnlockButton.tsx should always pass unit_amount: 3500.
+
+===================================================================
+Fix B — Post-claim authentication (CRITICAL — dashboard is broken)
+===================================================================
+
+The current claim route at app/api/claim/route.ts creates the auth 
+user and returns { success: true } but never signs the user in.
+The client at app/claim/[slug]/page.tsx does router.push('/dashboard') 
+but there is no session, so the dashboard redirects to /login.
+
+In app/api/claim/route.ts, add this block immediately before the 
+final return NextResponse.json({ success: true }):
+
+  // Sign the user in immediately after account creation
+  const { data: signInData, error: signInError } = 
+    await supabaseAdmin.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+  if (signInError) {
+    console.error('Post-claim sign in failed:', signInError)
+    return NextResponse.json({ success: true, requiresLogin: true })
+  }
+
+  return NextResponse.json({ 
+    success: true, 
+    session: signInData.session 
+  })
+
+In app/claim/[slug]/page.tsx, find the submitClaim function.
+It currently does:
+  if (data.success) {
+    router.push('/dashboard')
+  }
+
+Replace with:
+  if (data.success) {
+    if (data.session) {
+      const { createClient } = await import('@supabase/supabase-js')
+      const client = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+      await client.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      })
+    }
+    router.push('/dashboard')
+  }
+
+===================================================================
+Fix C — Build the dashboard sidebar layout
+===================================================================
+
+The dashboard currently has no sidebar. Each page has its own Header 
+but no unified navigation. This makes it feel broken.
+
+Create app/dashboard/layout.tsx:
+
+import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import Link from 'next/link'
+import Header from '@/components/Header'
+import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase'
+
+const NAV = [
+  { href: '/dashboard', label: 'Overview', icon: '▦' },
+  { href: '/dashboard/listing', label: 'My Listing', icon: '✎' },
+  { href: '/dashboard/leads', label: 'Leads', icon: '✉' },
+  { href: '/dashboard/subscription', label: 'Subscription', icon: '★' },
+  { href: '/dashboard/featured', label: 'Featured Listing', icon: '◈' },
+]
+
+export default async function DashboardLayout({ 
+  children 
+}: { 
+  children: React.ReactNode 
+}) {
+  if (!isSupabaseConfigured()) redirect('/login')
+  const cookieStore = cookies()
+  const supabase = createSupabaseServerClient(
+    (name) => cookieStore.get(name)?.value
+  )
+  if (!supabase) redirect('/login')
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) redirect('/login')
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <div className="flex flex-1">
+        <aside className="hidden md:flex w-52 flex-col bg-white 
+          border-r border-gray-200 py-6 px-3 shrink-0">
+          <nav className="flex flex-col gap-1 flex-1">
+            {NAV.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex items-center gap-3 px-3 py-2.5 
+                  rounded-lg text-sm font-medium text-gray-600 
+                  hover:bg-gray-50 hover:text-gray-900 transition-colors"
+              >
+                <span>{item.icon}</span>
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="mt-4 border-t border-gray-100 pt-4">
+            <form action="/api/auth/logout" method="POST">
+              <button type="submit" className="flex items-center gap-3 
+                px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 
+                hover:text-gray-600 w-full transition-colors">
+                <span>⇥</span> Log Out
+              </button>
+            </form>
+          </div>
+        </aside>
+        <main className="flex-1 bg-gray-50 p-6 min-h-0 overflow-auto">
+          {children}
+        </main>
+      </div>
+    </div>
+  )
+}
+
+Create app/api/auth/logout/route.ts:
+
+import { NextResponse } from 'next/server'
+import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase'
+import { cookies } from 'next/headers'
+
+export async function POST() {
+  if (isSupabaseConfigured()) {
+    const cookieStore = cookies()
+    const supabase = createSupabaseServerClient(
+      (name) => cookieStore.get(name)?.value
+    )
+    if (supabase) await supabase.auth.signOut()
+  }
+  const res = NextResponse.redirect(
+    new URL('/login', process.env.NEXT_PUBLIC_SITE_URL)
+  )
+  return res
+}
+
+IMPORTANT: After creating the layout, remove the standalone <Header /> 
+import and usage from these four files since the layout now provides it:
+- app/dashboard/page.tsx
+- app/dashboard/leads/page.tsx  
+- app/dashboard/listing/page.tsx
+- app/dashboard/subscription/page.tsx
+
+Also remove the outer min-h-screen wrapper divs from those pages —
+just return the inner content directly. The layout provides the shell.
+
+===================================================================
+Fix D — Build the missing /dashboard/featured page
+===================================================================
+
+This entire revenue stream ($49/$99/$199/mo featured placements) is 
+completely missing from the codebase. Build it now.
+
+Create app/dashboard/featured/page.tsx as a client component:
+
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { supabase } from '@/lib/supabase'
+
+interface Company {
+  id: string
+  city: string
+  state: string
+}
+
+interface FeaturedListing {
+  placement_type: string
+  active: boolean
+}
+
+export default function FeaturedPage() {
+  const router = useRouter()
+  const [company, setCompany] = useState<Company | null>(null)
+  const [featured, setFeatured] = useState<FeaturedListing[]>([])
+  const [homepageCount, setHomepageCount] = useState(0)
+  const [loading, setLoading] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!supabase) { router.push('/login'); return }
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!session) { router.push('/login'); return }
+      
+      const { data: user } = await supabase
+        .from('users')
+        .select('company_id, companies(id, city, state)')
+        .eq('email', session.user.email!)
+        .single()
+      
+      if (!user?.company_id) return
+      
+      const c = Array.isArray(user.companies) 
+        ? user.companies[0] 
+        : user.companies as Company
+      setCompany(c)
+
+      const [{ data: fl }, { count }] = await Promise.all([
+        supabase
+          .from('featured_listings')
+          .select('placement_type, active')
+          .eq('company_id', user.company_id)
+          .eq('active', true),
+        supabase
+          .from('featured_listings')
+          .select('*', { count: 'exact', head: true })
+          .eq('placement_type', 'homepage')
+          .eq('active', true),
+      ])
+      
+      setFeatured(fl || [])
+      setHomepageCount(count || 0)
+    })
+  }, [router])
+
+  const isActive = (type: string) => 
+    featured.some((f) => f.placement_type === type && f.active)
+
+  const subscribe = async (
+    priceEnvKey: string, 
+    tier: string, 
+    placement_type: string
+  ) => {
+    const priceId = (window as Window & { 
+      [key: string]: string 
+    })[priceEnvKey]
+    setLoading(tier)
+    try {
+      const res = await fetch('/api/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          plan_id: process.env[`NEXT_PUBLIC_${priceEnvKey}`], 
+          tier, 
+          placement_type 
+        }),
+      })
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+    } finally {
+      setLoading(null)
+    }
+  }
+
+  const PLANS = [
+    {
+      id: 'city_featured',
+      priceKey: 'NEXT_PUBLIC_STRIPE_CITY_FEATURED_PRICE_ID',
+      title: 'City Featured',
+      price: '$49/month',
+      description: `Appear at the top of all search results in ${company?.city || 'your city'}.`,
+      placement_type: 'city',
+      spots: null,
+    },
+    {
+      id: 'state_featured',
+      priceKey: 'NEXT_PUBLIC_STRIPE_STATE_FEATURED_PRICE_ID',
+      title: 'State Featured',
+      price: '$99/month',
+      description: `Appear at the top of all results across ${company?.state || 'your state'}.`,
+      placement_type: 'state',
+      spots: null,
+    },
+    {
+      id: 'homepage_featured',
+      priceKey: 'NEXT_PUBLIC_STRIPE_HOMEPAGE_FEATURED_PRICE_ID',
+      title: 'Homepage Featured',
+      price: '$199/month',
+      description: 'Appear in the Featured Companies section on the homepage. Visible to every visitor nationally.',
+      placement_type: 'homepage',
+      spots: 6,
+    },
+  ]
+
+  return (
+    <div>
+      <h1 className="text-2xl font-bold text-navy mb-2">
+        Featured Listing
+      </h1>
+      <p className="text-gray-500 text-sm mb-8">
+        Appear at the top of search results in your market. 
+        Featured companies get significantly more profile views 
+        and quote requests.
+      </p>
+
+      <div className="grid gap-6 md:grid-cols-3">
+        {PLANS.map((plan) => {
+          const active = isActive(plan.placement_type)
+          const spotsLeft = plan.spots 
+            ? plan.spots - homepageCount 
+            : null
+
+          return (
+            <div
+              key={plan.id}
+              className={`bg-white rounded-xl border-2 p-6 
+                ${active 
+                  ? 'border-green-400' 
+                  : 'border-gray-200'
+                }`}
+            >
+              {active && (
+                <span className="inline-block bg-green-100 text-green-700 
+                  text-xs font-semibold px-2 py-0.5 rounded-full mb-3">
+                  Active
+                </span>
+              )}
+              <h2 className="text-lg font-bold text-navy mb-1">
+                {plan.title}
+              </h2>
+              <div className="text-2xl font-bold text-navy mb-3">
+                {plan.price}
+              </div>
+              <p className="text-sm text-gray-500 mb-4">
+                {plan.description}
+              </p>
+              {spotsLeft !== null && (
+                <p className="text-xs text-amber-600 font-medium mb-4">
+                  {spotsLeft} of {plan.spots} spots remaining
+                </p>
+              )}
+              {!active && (
+                <button
+                  onClick={() => subscribe(
+                    plan.priceKey, 
+                    plan.id, 
+                    plan.placement_type
+                  )}
+                  disabled={loading === plan.id || 
+                    (spotsLeft !== null && spotsLeft <= 0)}
+                  className="w-full bg-navy text-white font-semibold 
+                    py-2.5 rounded-lg text-sm hover:bg-navy/90 
+                    transition-colors disabled:opacity-50 
+                    disabled:cursor-not-allowed"
+                >
+                  {loading === plan.id 
+                    ? 'Redirecting...' 
+                    : `Get ${plan.title}`}
+                </button>
+              )}
+              {active && (
+                <p className="text-sm text-green-600 font-medium text-center">
+                  ✓ Currently active
+                </p>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+Add these three env vars to .env.local:
+NEXT_PUBLIC_STRIPE_CITY_FEATURED_PRICE_ID=your_city_featured_price_id
+NEXT_PUBLIC_STRIPE_STATE_FEATURED_PRICE_ID=your_state_featured_price_id
+NEXT_PUBLIC_STRIPE_HOMEPAGE_FEATURED_PRICE_ID=your_homepage_featured_price_id
+
+In app/api/subscribe/route.ts, the checkout session creation needs 
+to pass placement_type in metadata. Find the line:
+  metadata: { company_id: user.company_id, tier },
+Replace with:
+  metadata: { 
+    company_id: user.company_id, 
+    tier, 
+    placement_type: body.placement_type || null 
+  },
+
+Also update the req.json() destructure to include placement_type:
+  const { plan_id, tier, placement_type } = await req.json()
+
+In app/api/webhooks/stripe/route.ts, in the 
+checkout.session.completed handler, after the existing subscription 
+tier block, add:
+
+  // Handle featured listing subscriptions
+  if (session.mode === 'subscription' && 
+      session.metadata?.placement_type &&
+      session.metadata?.company_id) {
+    const { company_id, placement_type } = session.metadata
+    const { data: co } = await supabaseAdmin
+      .from('companies')
+      .select('city, state')
+      .eq('id', company_id)
+      .single()
+
+    await supabaseAdmin.from('featured_listings').insert({
+      company_id,
+      placement_type,
+      city: co?.city || null,
+      state: co?.state || null,
+      stripe_subscription_id: session.subscription as string,
+      active: true,
+      starts_at: new Date().toISOString(),
+    })
+  }
+
+In the customer.subscription.deleted handler, after the existing 
+users table update, add:
+
+  await supabaseAdmin
+    .from('featured_listings')
+    .update({ active: false })
+    .eq('stripe_subscription_id', deletedSub.id)
+
+===================================================================
+Fix E — Update subscription page to correct pricing (Essentials/Growth)
+===================================================================
+
+In app/dashboard/subscription/page.tsx, replace the PLANS array.
+Currently it has Starter $99, Growth $199, Unlimited $399.
+Replace with:
+
+const PLANS = [
+  {
+    id: 'essentials',
+    priceId: process.env.NEXT_PUBLIC_STRIPE_ESSENTIALS_PRICE_ID || '',
+    name: 'Essentials',
+    price: '$149',
+    period: '/month',
+    leads: 'Shared leads included',
+    features: [
+      'Free leads included automatically',
+      'Automated SMS follow-up within 2 min of every lead',
+      'Missed call text back',
+      'Automated review request sequences',
+      'Appointment booking automation',
+      'Monthly performance report',
+      'Boosted directory ranking',
+      'Cancel anytime',
+    ],
+    popular: false,
+  },
+  {
+    id: 'growth',
+    priceId: process.env.NEXT_PUBLIC_STRIPE_GROWTH_PRICE_ID || '',
+    name: 'Growth',
+    price: '$349',
+    period: '/month',
+    leads: 'Semi-exclusive leads included',
+    features: [
+      'Everything in Essentials',
+      'Semi-exclusive leads — max 2 companies per lead',
+      'Google Business Profile management — 4 posts/month',
+      'Review response management within 48 hours',
+      'Pipeline dashboard — track every lead',
+      '90-day nurture sequences for cold prospects',
+      'Reactivation campaigns to past clients',
+      'Two-way SMS from your business number',
+      'Optional monthly strategy call',
+      'Cancel anytime',
+    ],
+    popular: true,
+  },
+]
+
+Add to .env.local:
+NEXT_PUBLIC_STRIPE_ESSENTIALS_PRICE_ID=your_essentials_price_id
+NEXT_PUBLIC_STRIPE_GROWTH_PRICE_ID=your_growth_price_id
+
+Remove NEXT_PUBLIC_STRIPE_STARTER_PRICE_ID and 
+NEXT_PUBLIC_STRIPE_UNLIMITED_PRICE_ID from .env.local.
+
+Also update app/for-cleaning-companies/page.tsx PLANS array to match:
+- Remove the current Growth ($199) and Unlimited ($399) plans
+- Add Essentials ($149) and Growth ($349) with the above feature lists
+- Keep Pay Per Lead ($35 per lead) as the first option
+
+In app/api/cron/reset-leads/route.ts, update the tier logic:
+  if (user.subscription_tier === 'essentials') leads_remaining = 5
+  else if (user.subscription_tier === 'growth') leads_remaining = 999
+  // growth gets all leads so no hard cap needed
+
+In app/api/webhooks/stripe/route.ts, update the leadsMap in both 
+the checkout.session.completed and customer.subscription.created 
+handlers:
+  const leadsMap: Record<string, number> = { 
+    essentials: 5, 
+    growth: 999 
+  }
+And update getPlanTier function:
+  if (priceId === process.env.STRIPE_ESSENTIALS_PRICE_ID) 
+    return 'essentials'
+  if (priceId === process.env.STRIPE_GROWTH_PRICE_ID) 
+    return 'growth'
+  return 'essentials'
+
+Also add server-side (non-NEXT_PUBLIC) env vars:
+STRIPE_ESSENTIALS_PRICE_ID=same_value_as_public
+STRIPE_GROWTH_PRICE_ID=same_value_as_public
+
+===================================================================
+Fix F — Fix Stripe webhook race condition on lead-unlocked page
+===================================================================
+
+In app/lead-unlocked/[lead_id]/[company_id]/page.tsx, the current 
+code does a single query for the lead_purchase record and if it 
+doesn't exist, it redirects to /unlock-lead. This breaks when the 
+Stripe webhook hasn't fired yet (common — can take 2-5 seconds).
+
+Replace the purchase query block at the top with:
+
+  // Poll for purchase — webhook may arrive after success_url redirect
+  let purchase = null
+  for (let i = 0; i < 6; i++) {
+    const { data } = await supabaseAdmin
+      .from('lead_purchases')
+      .select('*')
+      .eq('lead_id', lead_id)
+      .eq('company_id', company_id)
+      .single()
+    
+    if (data) { purchase = data; break }
+    if (i < 5) await new Promise(r => setTimeout(r, 1500))
+  }
+
+  if (!purchase) {
+    return (
+      <div className="min-h-screen flex flex-col bg-gray-50">
+        <Header />
+        <main className="flex-1 flex items-center justify-center px-4">
+          <div className="bg-white rounded-xl border border-gray-200 
+            p-8 max-w-md text-center">
+            <div className="text-4xl mb-4">⏳</div>
+            <h1 className="text-xl font-bold text-gray-900 mb-2">
+              Payment received — loading your contact...
+            </h1>
+            <p className="text-gray-500 text-sm mb-4">
+              This takes a few seconds. 
+              Refresh this page if it doesn't update.
+            </p>
+            <a href="" className="text-accent text-sm font-medium 
+              hover:underline">
+              Refresh →
+            </a>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+===================================================================
+Fix G — Add available leads count to dashboard overview
+===================================================================
+
+In app/dashboard/page.tsx, add this query alongside the existing 
+data fetches. Find where company data is fetched and add:
+
+  const { count: availableLeadsCount } = await supabaseAdmin
+    .from('leads')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'open')
+    .ilike('city', `%${company.city as string}%`)
+    .gte('created_at', 
+      new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()
+    )
+
+Then in the stats cards section, find any placeholder "Listing Views" 
+card and replace with:
+
+  <Link href="/dashboard/leads">
+    <div className="bg-white rounded-xl border border-gray-200 p-5 
+      hover:shadow-md transition-shadow cursor-pointer">
+      <div className="text-2xl font-bold text-navy">
+        {availableLeadsCount || 0}
+      </div>
+      <div className="text-sm text-gray-500 mt-1">
+        Leads Available Near You
+      </div>
+      <div className="text-xs text-accent mt-2 font-medium">
+        View leads →
+      </div>
+    </div>
+  </Link>
+
+===================================================================
+Fix H — Fix pSEO city pages to actually pre-render (critical for SEO)
+===================================================================
+
+The current commercial-cleaning/[location] route uses 
+export const dynamic = 'force-dynamic' which means Google sees a 
+dynamically rendered page — not a pre-built static page. This 
+defeats the entire purpose of programmatic SEO.
+
+In app/commercial-cleaning/[location]/page.tsx:
+1. Remove: export const dynamic = 'force-dynamic'
+2. Replace generateStaticParams with one that generates both state 
+   AND top city pages:
+
+export async function generateStaticParams() {
+  // Always include all 50 state pages
+  const stateParams = US_STATES.map((s) => ({
+    location: s.name.toLowerCase().replace(/\s+/g, '-'),
+  }))
+
+  // Add top 200 city combinations from actual company data
+  try {
+    const { data } = await supabaseAdmin
+      .from('companies')
+      .select('city, state')
+      .eq('active', true)
+      .not('city', 'is', null)
+      .not('state', 'is', null)
+      .limit(1000)
+
+    const citySet = new Set<string>()
+    data?.forEach((c) => {
+      if (c.city && c.state) {
+        const slug = `${c.city.toLowerCase().replace(/\s+/g, '-')}-${c.state.toLowerCase()}`
+        citySet.add(slug)
+      }
+    })
+
+    const cityParams = Array.from(citySet)
+      .slice(0, 200)
+      .map((slug) => ({ location: slug }))
+
+    return [...stateParams, ...cityParams]
+  } catch {
+    return stateParams
+  }
+}
+
+3. Add at the top of the file:
+   export const revalidate = 86400
+
+This tells Next.js to rebuild these pages once per day via ISR, 
+so new companies added to the database eventually appear without 
+requiring a full redeploy.
+
+===================================================================
+VERIFICATION CHECKLIST
+===================================================================
+
+After all fixes, verify these in order:
+
+1. Go to /search, select 1 company, click Request Quotes → fill 
+   form → submit. Check company receives email saying $35.
+2. Click the unlock link in that email. Verify price shows $35.
+3. Complete Stripe test payment (card: 4242 4242 4242 4242). 
+   Verify /lead-unlocked shows contact details without error.
+4. Go to an unclaimed company profile, click Claim This Listing,
+   complete all 3 steps. Verify you land on /dashboard LOGGED IN
+   without being redirected to /login.
+5. On /dashboard, verify the sidebar shows on desktop.
+6. Click 'Leads' in sidebar — verify /dashboard/leads loads with 
+   both Available and Purchased tabs.
+7. Click 'Featured Listing' in sidebar — verify the three featured 
+   options show with correct prices.
+8. Click 'Subscription' in sidebar — verify it shows Essentials 
+   $149 and Growth $349 (not old Starter/Unlimited).
+9. Go to /for-cleaning-companies — verify it shows the same 
+   updated Essentials/Growth pricing.
+10. Go to /admin/intelligence — verify HOT/WARM/NURTURE tabs load.
+11. Check Supabase leads table after step 1 — confirm NO lead_type 
+    column exists (flat pricing model).

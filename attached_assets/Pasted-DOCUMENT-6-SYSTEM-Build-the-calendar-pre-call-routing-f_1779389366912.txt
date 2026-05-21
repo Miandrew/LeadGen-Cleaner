@@ -1,0 +1,602 @@
+DOCUMENT 6 SYSTEM — Build the calendar + pre-call routing flow.
+
+===================================================================
+Step 1 — Add call_routing_responses table to Supabase
+===================================================================
+
+Run this migration in Supabase SQL Editor:
+
+CREATE TABLE IF NOT EXISTS call_routing_responses (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id      uuid REFERENCES companies(id) ON DELETE CASCADE,
+  biggest_focus   text[],
+  lead_sources    text[],
+  software_usage  text,
+  account_count   text,
+  call_notes      text,
+  booked_at       timestamptz DEFAULT now(),
+  call_scheduled  text
+);
+
+CREATE INDEX IF NOT EXISTS routing_company_idx 
+  ON call_routing_responses(company_id);
+
+Also add this column to company_onboarding table:
+ALTER TABLE company_onboarding 
+  ADD COLUMN IF NOT EXISTS call_booked boolean DEFAULT false;
+
+===================================================================
+Step 2 — Modify the claim route to redirect HOT to calendar
+===================================================================
+
+In app/api/claim/route.ts, after all the existing logic, change
+the final return statement:
+
+Currently:
+  return NextResponse.json({ success: true })
+
+Replace with:
+  return NextResponse.json({ 
+    success: true,
+    segment,
+    session: signInData?.session || null,
+    // HOT prospects should see the calendar, others go to dashboard
+    redirectTo: segment === 'HOT' ? '/claim/book' : '/dashboard'
+  })
+
+===================================================================
+Step 3 — Modify the claim page to handle HOT redirect
+===================================================================
+
+In app/claim/[slug]/page.tsx, update the submitClaim function.
+Currently it does router.push('/dashboard') on success.
+
+Replace with:
+
+  const data = await res.json()
+  if (data.success) {
+    // Set session if provided
+    if (data.session) {
+      const { createClient } = await import('@supabase/supabase-js')
+      const client = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      )
+      await client.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      })
+    }
+    // HOT goes to calendar, everyone else to dashboard
+    router.push(
+      data.redirectTo === '/claim/book'
+        ? `/claim/book?company_id=${company?.id}&name=${encodeURIComponent(form.full_name)}&email=${encodeURIComponent(form.email)}`
+        : '/dashboard'
+    )
+  }
+
+===================================================================
+Step 4 — Build the /claim/book page (calendar embed)
+===================================================================
+
+Create app/claim/book/page.tsx as a client component.
+
+This page has one job: show the Calendly calendar embed so HOT 
+prospects can book a call with you.
+
+'use client'
+
+import { useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
+import Header from '@/components/Header'
+
+function BookContent() {
+  const searchParams = useSearchParams()
+  const companyId = searchParams.get('company_id') || ''
+  const name = searchParams.get('name') || ''
+  const email = searchParams.get('email') || ''
+
+  useEffect(() => {
+    // Load Calendly widget script
+    const script = document.createElement('script')
+    script.src = 'https://assets.calendly.com/assets/external/widget.js'
+    script.async = true
+    document.body.appendChild(script)
+    return () => { document.body.removeChild(script) }
+  }, [])
+
+  // Build Calendly URL with prefill and passthrough param
+  const calendlyUrl = new URL(process.env.NEXT_PUBLIC_CALENDLY_URL || 
+    'https://calendly.com/your-username/discovery-call')
+  calendlyUrl.searchParams.set('name', name)
+  calendlyUrl.searchParams.set('email', email)
+  // Pass company_id through so confirmation page knows who booked
+  calendlyUrl.searchParams.set('a1', companyId)
+
+  return (
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <Header />
+      <main className="flex-1 py-10 px-4">
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-8">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex 
+              items-center justify-center mx-auto mb-4">
+              <svg className="w-6 h-6 text-green-600" fill="none" 
+                stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" 
+                  strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-navy mb-2">
+              Your listing is live
+            </h1>
+            <p className="text-gray-500 text-sm max-w-md mx-auto">
+              Grab a time below — we'll confirm your listing, turn on 
+              referral distribution for your area, and show you leads 
+              available right now. Takes 10 minutes.
+            </p>
+          </div>
+
+          {/* Calendly inline embed */}
+          <div 
+            className="calendly-inline-widget bg-white rounded-xl 
+              border border-gray-200 shadow-sm overflow-hidden"
+            data-url={calendlyUrl.toString()}
+            style={{ minWidth: '320px', height: '700px' }}
+          />
+
+          <p className="text-center text-xs text-gray-400 mt-4">
+            Prefer to skip for now?{' '}
+            <a href="/dashboard" className="text-accent hover:underline">
+              Go to your dashboard →
+            </a>
+          </p>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+export default function BookPage() {
+  return (
+    <Suspense>
+      <BookContent />
+    </Suspense>
+  )
+}
+
+Add to .env.local:
+NEXT_PUBLIC_CALENDLY_URL=https://calendly.com/YOUR_USERNAME/discovery-call
+
+In your Calendly account:
+- Create an event type called "Discovery Call" (15 or 30 min)
+- Under "Confirmation Page" settings, set redirect after booking to:
+  [YOUR_SITE_URL]/claim/confirmation?company_id={a1}
+  (Calendly passes the a1 custom question through to the redirect URL)
+- Enable the question "Anything you want to cover on the call?" 
+  as a text field — this maps to call_notes
+
+===================================================================
+Step 5 — Build the /claim/confirmation page (routing questions)
+===================================================================
+
+Create app/claim/confirmation/page.tsx as a client component.
+
+This page captures the 5 pre-call routing questions after booking.
+
+'use client'
+
+import { useState, Suspense } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
+import Header from '@/components/Header'
+
+const FOCUS_OPTIONS = [
+  'More commercial contracts',
+  'Following up with leads faster',
+  'Reducing missed calls',
+  'Managing operations',
+  'Cash flow challenges',
+  'Preparing to scale or sell',
+]
+
+const SOURCE_OPTIONS = [
+  'Referrals',
+  'Google / SEO',
+  'Paid ads',
+  'Not consistently — that\'s the problem',
+]
+
+const SOFTWARE_OPTIONS = [
+  'Yes, works well',
+  'Yes but it\'s messy',
+  'No — mostly manual',
+]
+
+const ACCOUNT_OPTIONS = [
+  '1–5',
+  '6–20',
+  '21–50',
+  '50+',
+]
+
+function ConfirmationContent() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const companyId = searchParams.get('company_id') || ''
+
+  const [form, setForm] = useState({
+    biggest_focus: [] as string[],
+    lead_sources: [] as string[],
+    software_usage: '',
+    account_count: '',
+    call_notes: '',
+  })
+  const [submitting, setSubmitting] = useState(false)
+  const [done, setDone] = useState(false)
+
+  const toggleArr = (arr: string[], val: string) =>
+    arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val]
+
+  const submit = async () => {
+    setSubmitting(true)
+    await fetch('/api/claim/routing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...form, company_id: companyId }),
+    })
+    setDone(true)
+    setSubmitting(false)
+  }
+
+  const OptionBtn = ({ 
+    label, selected, onClick, multi 
+  }: { 
+    label: string; selected: boolean; 
+    onClick: () => void; multi?: boolean 
+  }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`p-3 rounded-lg border-2 text-left text-sm 
+        font-medium transition-all ${
+        selected
+          ? 'border-navy bg-navy/5 text-navy'
+          : 'border-gray-200 hover:border-gray-300 text-gray-700'
+      }`}
+    >
+      {multi && (
+        <span className={`inline-block w-4 h-4 rounded mr-2 
+          border-2 align-middle ${
+          selected 
+            ? 'bg-navy border-navy' 
+            : 'border-gray-400'
+        }`} />
+      )}
+      {label}
+    </button>
+  )
+
+  if (done) {
+    return (
+      <div className="min-h-screen flex flex-col bg-gray-50">
+        <Header />
+        <main className="flex-1 flex items-center justify-center px-4">
+          <div className="max-w-md text-center">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex 
+              items-center justify-center mx-auto mb-4">
+              <svg className="w-8 h-8 text-green-600" fill="none" 
+                stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" 
+                  strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-navy mb-2">
+              You're all set
+            </h1>
+            <p className="text-gray-500 mb-6">
+              You'll get a reminder before the call. 
+              In the meantime, your dashboard shows leads 
+              available in your area right now.
+            </p>
+            <a href="/dashboard" 
+              className="inline-block bg-navy text-white font-semibold 
+                px-6 py-3 rounded-lg hover:bg-navy/90 transition-colors">
+              Go to Dashboard →
+            </a>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <Header />
+      <main className="flex-1 py-10 px-4">
+        <div className="max-w-xl mx-auto">
+          <div className="text-center mb-8">
+            <div className="w-12 h-12 bg-green-100 rounded-full flex 
+              items-center justify-center mx-auto mb-4">
+              <svg className="w-6 h-6 text-green-600" fill="none" 
+                stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" 
+                  strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h1 className="text-2xl font-bold text-navy mb-2">
+              You're booked
+            </h1>
+            <p className="text-gray-500 text-sm">
+              Takes 90 seconds — fill this out so we can skip 
+              the basics and get straight to what matters for 
+              your business.
+            </p>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 
+            shadow-sm p-6 space-y-8">
+
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">
+                What's your biggest focus right now?
+                <span className="text-gray-400 font-normal text-sm ml-1">
+                  (select all that apply)
+                </span>
+              </h3>
+              <div className="grid grid-cols-1 gap-2">
+                {FOCUS_OPTIONS.map(opt => (
+                  <OptionBtn key={opt} label={opt} multi
+                    selected={form.biggest_focus.includes(opt)}
+                    onClick={() => setForm(f => ({ 
+                      ...f, 
+                      biggest_focus: toggleArr(f.biggest_focus, opt) 
+                    }))}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">
+                How are you currently getting new clients?
+                <span className="text-gray-400 font-normal text-sm ml-1">
+                  (select all that apply)
+                </span>
+              </h3>
+              <div className="grid grid-cols-1 gap-2">
+                {SOURCE_OPTIONS.map(opt => (
+                  <OptionBtn key={opt} label={opt} multi
+                    selected={form.lead_sources.includes(opt)}
+                    onClick={() => setForm(f => ({ 
+                      ...f, 
+                      lead_sources: toggleArr(f.lead_sources, opt) 
+                    }))}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">
+                Are you using any software to manage leads or jobs?
+              </h3>
+              <div className="grid grid-cols-1 gap-2">
+                {SOFTWARE_OPTIONS.map(opt => (
+                  <OptionBtn key={opt} label={opt}
+                    selected={form.software_usage === opt}
+                    onClick={() => setForm(f => ({ 
+                      ...f, software_usage: opt 
+                    }))}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3">
+                How many active commercial accounts do you have?
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                {ACCOUNT_OPTIONS.map(opt => (
+                  <OptionBtn key={opt} label={opt}
+                    selected={form.account_count === opt}
+                    onClick={() => setForm(f => ({ 
+                      ...f, account_count: opt 
+                    }))}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-2">
+                Anything specific you want to cover on the call?
+                <span className="text-gray-400 font-normal text-sm ml-1">
+                  (optional)
+                </span>
+              </h3>
+              <textarea
+                rows={3}
+                value={form.call_notes}
+                onChange={e => setForm(f => ({ 
+                  ...f, call_notes: e.target.value 
+                }))}
+                placeholder="Any context that would help..."
+                className="w-full border border-gray-300 rounded-lg 
+                  px-4 py-2.5 text-sm focus:outline-none 
+                  focus:ring-2 focus:ring-accent"
+              />
+            </div>
+
+            <button
+              onClick={submit}
+              disabled={submitting || !form.biggest_focus.length}
+              className="w-full bg-navy disabled:bg-gray-300 
+                hover:bg-navy/90 text-white font-semibold py-3 
+                rounded-lg text-sm transition-colors"
+            >
+              {submitting ? 'Saving…' : 'Submit →'}
+            </button>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+export default function ConfirmationPage() {
+  return (
+    <Suspense>
+      <ConfirmationContent />
+    </Suspense>
+  )
+}
+
+===================================================================
+Step 6 — Build the /api/claim/routing API route
+===================================================================
+
+Create app/api/claim/routing/route.ts:
+
+import { NextRequest, NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase'
+import { sendEmail } from '@/lib/resend'
+
+export async function POST(req: NextRequest) {
+  const body = await req.json()
+  const { 
+    company_id, biggest_focus, lead_sources, 
+    software_usage, account_count, call_notes 
+  } = body
+
+  if (!company_id) {
+    return NextResponse.json({ error: 'Missing company_id' }, 
+      { status: 400 })
+  }
+
+  await supabaseAdmin.from('call_routing_responses').insert({
+    company_id,
+    biggest_focus,
+    lead_sources,
+    software_usage,
+    account_count,
+    call_notes,
+  })
+
+  // Mark as call_booked in onboarding
+  await supabaseAdmin
+    .from('company_onboarding')
+    .update({ call_booked: true })
+    .eq('company_id', company_id)
+
+  // Send admin notification with routing data
+  const { data: company } = await supabaseAdmin
+    .from('companies')
+    .select('name, city, state, email')
+    .eq('id', company_id)
+    .single()
+
+  if (company) {
+    const agenda = biggest_focus?.includes('Cash flow challenges')
+      ? 'LENDING REFERRAL'
+      : biggest_focus?.includes('Preparing to scale or sell')
+      ? 'ACQUISITION CONVERSATION'
+      : 'GHL + LEADS PITCH'
+
+    await sendEmail(
+      process.env.ADMIN_EMAIL!,
+      `📞 Call booked — ${company.name} | Agenda: ${agenda}`,
+      `<div style="font-family:sans-serif;max-width:600px">
+        <h2>Call Booked — ${company.name}</h2>
+        <p><strong>City:</strong> ${company.city}, ${company.state}</p>
+        <p><strong>Email:</strong> ${company.email}</p>
+        <hr/>
+        <h3>Your Agenda: ${agenda}</h3>
+        <p><strong>Biggest Focus:</strong> ${biggest_focus?.join(', ')}</p>
+        <p><strong>Current Lead Sources:</strong> ${lead_sources?.join(', ')}</p>
+        <p><strong>Software:</strong> ${software_usage}</p>
+        <p><strong>Active Accounts:</strong> ${account_count}</p>
+        ${call_notes ? `<p><strong>Their Notes:</strong> ${call_notes}</p>` : ''}
+        <hr/>
+        <p style="color:#666;font-size:13px">
+          Open with: "Before we get into anything — you mentioned 
+          [${biggest_focus?.[0]}]. Tell me more about that."
+        </p>
+      </div>`
+    )
+  }
+
+  return NextResponse.json({ success: true })
+}
+
+===================================================================
+Step 7 — Add routing responses to admin intelligence dashboard
+===================================================================
+
+In app/admin/intelligence/page.tsx, add a new query alongside 
+the existing company_onboarding fetch:
+
+  const { data: routingData } = await supabaseAdmin
+    .from('call_routing_responses')
+    .select('*, companies(name, city, state, email)')
+    .order('booked_at', { ascending: false })
+
+Pass routingData to a new tab in IntelligenceClient.
+
+In app/admin/intelligence/IntelligenceClient.tsx, add a fourth 
+tab: 'BOOKED'. Show it as a blue badge.
+
+The BOOKED tab shows a table with columns:
+  Company | City | Email | Focus | Accounts | Software | Call Notes | Booked At
+
+Each row expands to show all 5 routing answers.
+
+Add a new stat to the admin overview: "Calls Booked" count from 
+call_routing_responses table.
+
+===================================================================
+Step 8 — Add NEXT_PUBLIC_CALENDLY_URL to environment
+===================================================================
+
+Add to .env.local:
+  NEXT_PUBLIC_CALENDLY_URL=https://calendly.com/YOUR_USERNAME/YOUR_EVENT
+
+Add to Vercel environment variables (same key and value).
+
+In your Calendly account settings for the discovery call event:
+1. Under "Confirmation Page", select "Redirect to external site"
+2. Set URL to: https://commercialcleaningnearme.com/claim/confirmation
+3. Check "Pass event details to redirect URL"
+4. Under "Invitee Questions", add a hidden field a1 
+   (this carries the company_id through)
+
+===================================================================
+VERIFICATION CHECKLIST
+===================================================================
+
+1. Complete the full claim flow as a HOT prospect:
+   - Survey: biggest_challenge = "Not getting enough leads"
+   - Budget = "$500–$1,000/month"
+   - Submit → should redirect to /claim/book not /dashboard
+
+2. On /claim/book: verify Calendly widget loads with name and 
+   email pre-filled
+
+3. Book a test appointment in Calendly. After booking, verify 
+   you land on /claim/confirmation?company_id=[id]
+
+4. Fill out the 5 routing questions and submit
+
+5. Check your admin email — should receive a formatted call 
+   brief with agenda label (GHL + LEADS PITCH, LENDING REFERRAL, 
+   or ACQUISITION CONVERSATION)
+
+6. In /admin/intelligence, verify the BOOKED tab shows the 
+   test company with all 5 routing answers
+
+7. Complete the claim flow as a WARM prospect:
+   - Survey: biggest_challenge = "Not getting enough leads"  
+   - Budget = "$200–$500/month"
+   - Submit → should redirect to /dashboard, NOT /claim/book
+
+8. Complete as NURTURE → should also go to /dashboard directly

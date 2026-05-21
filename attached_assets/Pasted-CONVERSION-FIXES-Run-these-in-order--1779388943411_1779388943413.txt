@@ -1,0 +1,435 @@
+CONVERSION FIXES — Run these in order.
+
+===================================================================
+Fix C1 — Homepage: fix static numbers and service grid links
+===================================================================
+
+In app/page.tsx, the getStats() function already queries Supabase 
+for service counts and state data. Add a total company count to it:
+
+In the getStats function, add this query alongside the existing ones:
+
+  const { count: totalCompanies } = await supabaseAdmin
+    .from('companies')
+    .select('*', { count: 'exact', head: true })
+    .eq('active', true)
+
+  const { count: totalStates } = await supabaseAdmin
+    .from('companies')
+    .select('state')
+    .eq('active', true)
+    .not('state', 'is', null)
+
+  // Count unique states
+  const { data: stateList } = await supabaseAdmin
+    .from('companies')
+    .select('state')
+    .eq('active', true)
+    .not('state', 'is', null)
+  
+  const uniqueStateCount = new Set(
+    (stateList || []).map((c: { state: string }) => c.state)
+  ).size
+
+Return totalCompanies and uniqueStateCount from getStats().
+
+Then in the hero section, replace the hardcoded trust bar items:
+  ['5,600+ Companies Listed', '36 States Covered', 
+   'Real Google Reviews', 'Free to Search']
+
+With dynamic values:
+  [
+    `${(totalCompanies || 0).toLocaleString()}+ Companies Listed`,
+    `${uniqueStateCount || 50} States Covered`,
+    'Real Google Reviews',
+    'Free to Search'
+  ]
+
+In the service grid section, find:
+  href={`/search?service=${encodeURIComponent(service.value)}`}
+Replace with:
+  href={`/service/${service.value}`}
+
+In the company CTA section at the bottom, replace the current copy:
+  "Are You a Commercial Cleaning Company?"
+  "Claim your free listing today and start receiving quote requests 
+   from facility managers in your area."
+  "Claim Your Listing — Free"
+
+With stronger copy:
+  "Own a Commercial Cleaning Company?"
+  "Facility managers in your city are actively searching for 
+   commercial cleaners right now. Claim your free listing and start 
+   receiving quote requests — no monthly fee to get started."
+  "Claim Your Free Listing →"
+
+===================================================================
+Fix C2 — Quote form: pre-populate from URL context
+===================================================================
+
+In app/quote/page.tsx, inside the QuoteContent function, the 
+searchParams already reads the 'companies' param. Add reads for 
+city, state, and service:
+
+  const preCity = searchParams.get('city') || ''
+  const preState = searchParams.get('state') || ''
+  const preService = searchParams.get('service') || ''
+
+Update the useState initializer for form to use these:
+
+  const [form, setForm] = useState({
+    service_type: preService,
+    building_type: '',
+    building_size: '',
+    frequency: '',
+    city: preCity,
+    state: preState,
+    contact_name: '',
+    business_name: '',
+    contact_email: '',
+    contact_phone: '',
+    message: '',
+  })
+
+Now update the pSEO pages and search page to pass city/state/service
+in the quote URL. In components/SelectionBar.tsx, the 
+onRequestQuotes function currently navigates to:
+  /quote?companies=${selectedIds.join(',')}
+
+It needs city, state, and service context. Update SelectionBarProps 
+to accept optional context:
+
+interface SelectionBarProps {
+  selectedCount: number
+  onRequestQuotes: () => void
+  city?: string
+  state?: string
+  service?: string
+}
+
+Update the button onClick to call onRequestQuotes (which is defined
+by the parent and can include context). In PseoCompanyGrid.tsx, 
+update SelectionBar usage to pass location context. The component 
+receives companies — get city/state from the first company as a 
+fallback, or accept props from the parent page.
+
+In app/commercial-cleaning/[location]/page.tsx, pass city and state
+to PseoCompanyGrid:
+
+<PseoCompanyGrid
+  companies={...}
+  city={city || ''}
+  state={stateCode || ''}
+/>
+
+Update PseoCompanyGrid to accept and use these:
+
+interface Props {
+  companies: Company[]
+  city?: string
+  state?: string
+  service?: string
+}
+
+Then pass them to SelectionBar's router.push:
+  router.push(
+    `/quote?companies=${selectedIds.join(',')}&city=${city || ''}&state=${state || ''}&service=${service || ''}`
+  )
+
+===================================================================
+Fix C3 — Quote form: fix service label display on step 3
+===================================================================
+
+In app/quote/page.tsx, in the step 3 review section, find:
+  <div><span className="font-medium">Service:</span> {form.service_type}</div>
+
+Replace with:
+  import { serviceLabel } from '@/lib/utils' (add to imports)
+  
+  <div>
+    <span className="font-medium">Service:</span> {serviceLabel(form.service_type)}
+  </div>
+
+This shows "Office Cleaning" instead of "office" in the review.
+
+===================================================================
+Fix C4 — Quote success page: remove the wrong CTA
+===================================================================
+
+In app/quote/success/page.tsx, remove the "Browse More Companies"
+Link button entirely. Replace the entire page content with:
+
+export default function QuoteSuccessPage() {
+  return (
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <Header />
+      <main className="flex-1 flex items-center justify-center px-4 py-16">
+        <div className="max-w-md w-full text-center">
+          <div className="w-20 h-20 bg-green-100 rounded-full flex 
+            items-center justify-center mx-auto mb-6">
+            <svg className="w-10 h-10 text-green-600" fill="none" 
+              stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" 
+                strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-navy mb-4">
+            Request Sent
+          </h1>
+          <p className="text-gray-600 mb-2">
+            The cleaning companies you selected have been notified.
+          </p>
+          <p className="text-gray-600 mb-2">
+            They will review your request and contact you 
+            directly within 24 hours.
+          </p>
+          <p className="text-gray-500 text-sm mt-6">
+            Check your email for a confirmation. 
+            If you don't hear back within 24 hours, reply to that 
+            email and we'll follow up on your behalf.
+          </p>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+The last line ("reply to that email and we'll follow up") sets a 
+genuine service expectation that builds trust and reduces anxiety 
+about whether the request actually went through.
+
+===================================================================
+Fix C5 — Company profile: move quote CTA and fix phone
+===================================================================
+
+In app/company/[slug]/page.tsx, make two changes:
+
+CHANGE 1 — Move the quote CTA into the header card.
+The header card currently ends with the phone/website buttons and
+the "Claim This Listing" link. Add a "Request Free Quote" button 
+to the same row as phone and website:
+
+In the flex gap-3 div that contains the phone and website buttons,
+add after the website button:
+
+  <Link
+    href={`/quote?companies=${company.id}&city=${encodeURIComponent(company.city || '')}&state=${company.state || ''}`}
+    className="inline-flex items-center gap-2 bg-accent text-white 
+      text-sm font-semibold px-4 py-2 rounded-lg 
+      hover:bg-accent/90 transition-colors"
+  >
+    Request Free Quote
+  </Link>
+
+CHANGE 2 — Demote the phone number button.
+The phone number is currently a large navy button competing with
+the quote action. Change it from a filled button to an outlined 
+text link so the quote CTA is the primary action:
+
+Change the phone button className from:
+  "inline-flex items-center gap-2 bg-navy text-white text-sm 
+   font-semibold px-4 py-2 rounded-lg hover:bg-navy/90 
+   transition-colors"
+
+To:
+  "inline-flex items-center gap-2 border border-gray-300 
+   text-gray-700 text-sm font-medium px-4 py-2 rounded-lg 
+   hover:border-gray-400 transition-colors"
+
+CHANGE 3 — Make the "Claim This Listing" banner visible.
+For unclaimed companies, replace the small gray text link with 
+a banner ABOVE the header card:
+
+Add this before the header card div, only when !company.claimed:
+
+  {!company.claimed && (
+    <div className="bg-amber-50 border border-amber-200 rounded-xl 
+      p-4 flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-semibold text-amber-900">
+          Is this your business?
+        </p>
+        <p className="text-xs text-amber-700 mt-0.5">
+          Claim your free listing to manage this profile and 
+          receive leads from facility managers.
+        </p>
+      </div>
+      <Link
+        href={`/claim/${company.slug}`}
+        className="flex-shrink-0 bg-amber-600 text-white text-sm 
+          font-semibold px-4 py-2 rounded-lg hover:bg-amber-700 
+          transition-colors"
+      >
+        Claim Free →
+      </Link>
+    </div>
+  )}
+
+And remove the existing small "Claim This Listing →" link that 
+appears below the phone/website buttons.
+
+===================================================================
+Fix C6 — Fix claim search to query by name, not slug
+===================================================================
+
+In app/api/company-by-slug/route.ts, the current GET handler 
+finds a company by slug. It needs to also handle a name/city search
+for the claim search page.
+
+Check the current route — if it only queries by exact slug match,
+update it to handle a 'q' query param as a name search:
+
+export async function GET(req: NextRequest) {
+  const slug = req.nextUrl.searchParams.get('slug')
+  const q = req.nextUrl.searchParams.get('q')
+  
+  if (slug) {
+    // Existing slug lookup for company profile page
+    const { data } = await supabaseAdmin
+      .from('companies')
+      .select('id, name, city, state, slug, claimed')
+      .eq('slug', slug)
+      .single()
+    return NextResponse.json({ company: data })
+  }
+  
+  if (q) {
+    // Name search for claim flow
+    const { data } = await supabaseAdmin
+      .from('companies')
+      .select('id, name, city, state, slug, claimed')
+      .ilike('name', `%${q}%`)
+      .eq('active', true)
+      .eq('claimed', false)  // Only show unclaimed companies
+      .order('rating', { ascending: false })
+      .limit(10)
+    return NextResponse.json(data || [])
+  }
+  
+  return NextResponse.json({ error: 'Missing slug or q param' }, 
+    { status: 400 })
+}
+
+===================================================================
+Fix C7 — For-cleaning-companies page: fix fake testimonials
+===================================================================
+
+In app/for-cleaning-companies/page.tsx, remove the TESTIMONIALS 
+array and the entire testimonials section. Replace with a simple 
+"What You Get" guarantee section:
+
+Replace the testimonials section with:
+
+<section className="py-20 px-4 bg-gray-50">
+  <div className="max-w-4xl mx-auto">
+    <h2 className="text-3xl font-bold text-navy text-center mb-12">
+      The Math Is Simple
+    </h2>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {[
+        {
+          number: '$35',
+          label: 'Cost to unlock one lead',
+          sub: 'Pay only when you want contact details'
+        },
+        {
+          number: '$1,200+',
+          label: 'Average annual contract value',
+          sub: 'Most commercial cleaning contracts are recurring'
+        },
+        {
+          number: '34x',
+          label: 'Return on a single conversion',
+          sub: 'One closed deal from one lead pays for 34 more'
+        }
+      ].map((item) => (
+        <div key={item.label} 
+          className="bg-white rounded-2xl border border-gray-200 
+            p-8 text-center shadow-sm">
+          <div className="text-4xl font-black text-navy mb-2">
+            {item.number}
+          </div>
+          <div className="font-semibold text-gray-900 mb-1">
+            {item.label}
+          </div>
+          <div className="text-sm text-gray-500">{item.sub}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+This is more honest, more compelling, and eliminates the 
+credibility risk of fake testimonials. Add real testimonials 
+back once you have them from actual paying customers.
+
+Also fix the FAQ answer about emailing to get added. Find:
+  "Contact us at hello@commercialcleaningnearme.com and we'll 
+   add your company within 24 hours."
+
+Replace with:
+  "Search for your company on the claim page — most US commercial 
+   cleaning companies are already in our directory. If you don't 
+   find yourself, reply to this FAQ and we'll get you added 
+   within 48 hours."
+
+===================================================================
+Fix C8 — Fix the duplicate/inconsistent company counts
+===================================================================
+
+The homepage hero says "5,600+ Companies" 
+The stats bar on for-cleaning-companies says "10,000+ Companies"
+These are hardcoded and contradictory.
+
+In app/for-cleaning-companies/page.tsx, convert it to a server 
+component (remove 'use client' — the page has no client state) 
+and fetch the real count:
+
+At the top of the file, change to:
+import { supabaseAdmin } from '@/lib/supabase'
+
+Add before the return:
+async function getCompanyCount() {
+  try {
+    const { count } = await supabaseAdmin
+      .from('companies')
+      .select('*', { count: 'exact', head: true })
+      .eq('active', true)
+    return count || 0
+  } catch {
+    return 0
+  }
+}
+
+export default async function ForCleaningCompaniesPage() {
+  const companyCount = await getCompanyCount()
+  ...
+}
+
+Then replace the hardcoded '10,000+' stat with:
+  `${companyCount.toLocaleString()}+`
+
+===================================================================
+VERIFICATION CHECKLIST for conversion fixes
+===================================================================
+
+1. Homepage: trust bar shows real numbers from database, 
+   not "5,600+" and "36 States"
+2. Homepage: service grid cards link to /service/[service] 
+   not /search?service=
+3. Quote form: go to /commercial-cleaning/austin-tx, select a 
+   company, click Request Quotes — verify city pre-fills as 
+   "Austin" and state pre-fills as "TX" on the form
+4. Quote form step 3: verify service shows "Office Cleaning" 
+   not "office"
+5. Quote success: verify "Browse More Companies" button is gone
+6. Company profile: verify "Request Free Quote" button appears 
+   in the header next to phone and website
+7. Company profile: on an unclaimed company, verify the amber 
+   banner appears at the top
+8. Company profile: phone number should now appear as outlined 
+   text link, not filled navy button
+9. Claim page: search for "cleaning" — should return company 
+   names with ilike match, not empty results
+10. For-cleaning-companies: fake testimonials replaced with 
+    math section, company count is real and matches homepage

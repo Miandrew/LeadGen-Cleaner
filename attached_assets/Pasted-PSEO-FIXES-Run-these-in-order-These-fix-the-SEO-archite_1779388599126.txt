@@ -1,0 +1,206 @@
+PSEO FIXES — Run these in order. These fix the SEO architecture.
+
+===================================================================
+Fix P1 — Remove force-dynamic from all pSEO pages and add ISR
+===================================================================
+
+Remove the line:
+  export const dynamic = 'force-dynamic'
+
+From ALL of these files:
+- app/commercial-cleaning/[location]/page.tsx
+- app/commercial-cleaning-near-me/[location]/page.tsx
+- app/service/[service]/page.tsx
+- app/service/[service]/[location]/page.tsx
+- app/state/[state]/page.tsx
+- app/browse-by-service/page.tsx
+
+Add this line at the top of each of those files instead:
+  export const revalidate = 86400
+
+browse-by-state/page.tsx already has revalidate = 3600, keep it.
+
+This single change is the most impactful SEO fix in the entire 
+codebase. It turns every pSEO page from a dynamically rendered 
+response into a statically cached page served from Vercel's edge 
+network.
+
+===================================================================
+Fix P2 — Fix generateStaticParams to actually pre-build pages
+===================================================================
+
+In app/commercial-cleaning/[location]/page.tsx, replace the current
+generateStaticParams (which only generates 50 state pages) with:
+
+export async function generateStaticParams() {
+  // All 50 state pages
+  const stateParams = US_STATES.map((s) => ({
+    location: s.name.toLowerCase().replace(/\s+/g, '-'),
+  }))
+
+  // Top city pages from actual database
+  try {
+    const { data } = await supabaseAdmin
+      .from('companies')
+      .select('city, state')
+      .eq('active', true)
+      .not('city', 'is', null)
+      .not('state', 'is', null)
+      .limit(2000)
+
+    const seen = new Set<string>()
+    const cityParams: { location: string }[] = []
+
+    for (const c of data || []) {
+      if (!c.city || !c.state) continue
+      const slug = `${c.city.toLowerCase().replace(/\s+/g, '-')}-${c.state.toLowerCase()}`
+      if (!seen.has(slug)) {
+        seen.add(slug)
+        cityParams.push({ location: slug })
+      }
+      if (cityParams.length >= 500) break
+    }
+
+    return [...stateParams, ...cityParams]
+  } catch {
+    return stateParams
+  }
+}
+
+In app/commercial-cleaning-near-me/[location]/page.tsx, replace the
+current generateStaticParams (which hardcodes only 20 cities) with
+the exact same function above. This page should pre-build the same
+city combinations as the main commercial-cleaning pages.
+
+In app/service/[service]/[location]/page.tsx, add 
+generateStaticParams:
+
+export async function generateStaticParams() {
+  // All service + state combinations
+  const params: { service: string; location: string }[] = []
+  
+  for (const service of SERVICE_TYPES) {
+    // State pages for each service
+    for (const state of US_STATES) {
+      params.push({
+        service: service.value,
+        location: state.name.toLowerCase().replace(/\s+/g, '-'),
+      })
+    }
+  }
+  
+  // Top service + city combinations from database
+  try {
+    const { data } = await supabaseAdmin
+      .from('companies')
+      .select('city, state, services')
+      .eq('active', true)
+      .not('city', 'is', null)
+      .limit(3000)
+    
+    const seen = new Set<string>()
+    let count = 0
+    
+    for (const company of data || []) {
+      if (!company.city || !company.state) continue
+      for (const svc of company.services || []) {
+        const match = SERVICE_TYPES.find(s => s.value === svc)
+        if (!match) continue
+        const citySlug = `${company.city.toLowerCase().replace(/\s+/g, '-')}-${company.state.toLowerCase()}`
+        const key = `${svc}:${citySlug}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          params.push({ service: svc, location: citySlug })
+          count++
+        }
+        if (count >= 1000) break
+      }
+      if (count >= 1000) break
+    }
+  } catch {}
+  
+  return params
+}
+
+===================================================================
+Fix P3 — Fix the near-me page to match commercial-cleaning quality
+===================================================================
+
+The /commercial-cleaning-near-me/[location] page is a stripped-down
+version of the main page. It needs to be nearly identical.
+
+Replace the entire content of 
+app/commercial-cleaning-near-me/[location]/page.tsx with this:
+
+export const revalidate = 86400
+
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { notFound } from 'next/navigation'
+import Header from '@/components/Header'
+import Footer from '@/components/Footer'
+import PseoCompanyGrid from '@/components/PseoCompanyGrid'
+import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase'
+import { US_STATES, FULL_STATE_NAMES } from '@/lib/utils'
+
+[Use the same generateStaticParams from Fix P2 above]
+
+function parseCityState(location: string): { city: string; state: string } {
+  const parts = location.split('-')
+  const state = parts[parts.length - 1].toUpperCase()
+  const city = parts.slice(0, -1).join(' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+  return { city, state }
+}
+
+export async function generateMetadata({ params }: { params: { location: string } }): Promise<Metadata> {
+  const { city, state } = parseCityState(params.location)
+  const stateName = FULL_STATE_NAMES[state] || state
+  return {
+    title: `Commercial Cleaning Near Me in ${city}, ${stateName} | CommercialCleaningNearMe.com`,
+    description: `Find commercial cleaning companies near you in ${city}, ${stateName}. Compare verified local cleaners and request free quotes today.`,
+  }
+}
+
+export default async function NearMePage({ params }: { params: { location: string } }) {
+  const { city, state } = parseCityState(params.location)
+  const stateName = FULL_STATE_NAMES[state] || state
+  if (!US_STATES.some(s => s.code === state)) notFound()
+
+  let companies: unknown[] = []
+  let count = 0
+  let relatedCities: string[] = []
+
+  if (isSupabaseConfigured() && supabaseAdmin) {
+    const [res, chipsRes] = await Promise.all([
+      supabaseAdmin
+        .from('companies')
+        .select('*')
+        .ilike('city', city)
+        .eq('state', state)
+        .eq('active', true)
+        .order('rating', { ascending: false })
+        .limit(20),
+      supabaseAdmin
+        .from('companies')
+        .select('city')
+        .eq('state', state)
+        .eq('active', true)
+        .limit(200),
+    ])
+    companies = res.data || []
+    count = res.count || companies.length
+
+    const allCities = [...new Set(
+      (chipsRes.data || [])
+        .map((c: { city: string }) => c.city)
+        .filter(Boolean)
+    )] as string[]
+    relatedCities = allCities
+      .filter(c => c.toLowerCase() !== city.toLowerCase())
+      .slice(0, 8)
+  }
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Bread

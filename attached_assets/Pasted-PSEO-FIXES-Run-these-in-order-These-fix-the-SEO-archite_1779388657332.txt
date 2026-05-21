@@ -1,0 +1,507 @@
+PSEO FIXES — Run these in order. These fix the SEO architecture.
+
+===================================================================
+Fix P1 — Remove force-dynamic from all pSEO pages and add ISR
+===================================================================
+
+Remove the line:
+  export const dynamic = 'force-dynamic'
+
+From ALL of these files:
+- app/commercial-cleaning/[location]/page.tsx
+- app/commercial-cleaning-near-me/[location]/page.tsx
+- app/service/[service]/page.tsx
+- app/service/[service]/[location]/page.tsx
+- app/state/[state]/page.tsx
+- app/browse-by-service/page.tsx
+
+Add this line at the top of each of those files instead:
+  export const revalidate = 86400
+
+browse-by-state/page.tsx already has revalidate = 3600, keep it.
+
+This single change is the most impactful SEO fix in the entire 
+codebase. It turns every pSEO page from a dynamically rendered 
+response into a statically cached page served from Vercel's edge 
+network.
+
+===================================================================
+Fix P2 — Fix generateStaticParams to actually pre-build pages
+===================================================================
+
+In app/commercial-cleaning/[location]/page.tsx, replace the current
+generateStaticParams (which only generates 50 state pages) with:
+
+export async function generateStaticParams() {
+  // All 50 state pages
+  const stateParams = US_STATES.map((s) => ({
+    location: s.name.toLowerCase().replace(/\s+/g, '-'),
+  }))
+
+  // Top city pages from actual database
+  try {
+    const { data } = await supabaseAdmin
+      .from('companies')
+      .select('city, state')
+      .eq('active', true)
+      .not('city', 'is', null)
+      .not('state', 'is', null)
+      .limit(2000)
+
+    const seen = new Set<string>()
+    const cityParams: { location: string }[] = []
+
+    for (const c of data || []) {
+      if (!c.city || !c.state) continue
+      const slug = `${c.city.toLowerCase().replace(/\s+/g, '-')}-${c.state.toLowerCase()}`
+      if (!seen.has(slug)) {
+        seen.add(slug)
+        cityParams.push({ location: slug })
+      }
+      if (cityParams.length >= 500) break
+    }
+
+    return [...stateParams, ...cityParams]
+  } catch {
+    return stateParams
+  }
+}
+
+In app/commercial-cleaning-near-me/[location]/page.tsx, replace the
+current generateStaticParams (which hardcodes only 20 cities) with
+the exact same function above. This page should pre-build the same
+city combinations as the main commercial-cleaning pages.
+
+In app/service/[service]/[location]/page.tsx, add 
+generateStaticParams:
+
+export async function generateStaticParams() {
+  // All service + state combinations
+  const params: { service: string; location: string }[] = []
+  
+  for (const service of SERVICE_TYPES) {
+    // State pages for each service
+    for (const state of US_STATES) {
+      params.push({
+        service: service.value,
+        location: state.name.toLowerCase().replace(/\s+/g, '-'),
+      })
+    }
+  }
+  
+  // Top service + city combinations from database
+  try {
+    const { data } = await supabaseAdmin
+      .from('companies')
+      .select('city, state, services')
+      .eq('active', true)
+      .not('city', 'is', null)
+      .limit(3000)
+    
+    const seen = new Set<string>()
+    let count = 0
+    
+    for (const company of data || []) {
+      if (!company.city || !company.state) continue
+      for (const svc of company.services || []) {
+        const match = SERVICE_TYPES.find(s => s.value === svc)
+        if (!match) continue
+        const citySlug = `${company.city.toLowerCase().replace(/\s+/g, '-')}-${company.state.toLowerCase()}`
+        const key = `${svc}:${citySlug}`
+        if (!seen.has(key)) {
+          seen.add(key)
+          params.push({ service: svc, location: citySlug })
+          count++
+        }
+        if (count >= 1000) break
+      }
+      if (count >= 1000) break
+    }
+  } catch {}
+  
+  return params
+}
+
+===================================================================
+Fix P3 — Fix the near-me page to match commercial-cleaning quality
+===================================================================
+
+The /commercial-cleaning-near-me/[location] page is a stripped-down
+version of the main page. It needs to be nearly identical.
+
+Replace the entire content of 
+app/commercial-cleaning-near-me/[location]/page.tsx with this:
+
+export const revalidate = 86400
+
+import type { Metadata } from 'next'
+import Link from 'next/link'
+import { notFound } from 'next/navigation'
+import Header from '@/components/Header'
+import Footer from '@/components/Footer'
+import PseoCompanyGrid from '@/components/PseoCompanyGrid'
+import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase'
+import { US_STATES, FULL_STATE_NAMES } from '@/lib/utils'
+
+[Use the same generateStaticParams from Fix P2 above]
+
+function parseCityState(location: string): { city: string; state: string } {
+  const parts = location.split('-')
+  const state = parts[parts.length - 1].toUpperCase()
+  const city = parts.slice(0, -1).join(' ')
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+  return { city, state }
+}
+
+export async function generateMetadata({ params }: { params: { location: string } }): Promise<Metadata> {
+  const { city, state } = parseCityState(params.location)
+  const stateName = FULL_STATE_NAMES[state] || state
+  return {
+    title: `Commercial Cleaning Near Me in ${city}, ${stateName} | CommercialCleaningNearMe.com`,
+    description: `Find commercial cleaning companies near you in ${city}, ${stateName}. Compare verified local cleaners and request free quotes today.`,
+  }
+}
+
+export default async function NearMePage({ params }: { params: { location: string } }) {
+  const { city, state } = parseCityState(params.location)
+  const stateName = FULL_STATE_NAMES[state] || state
+  if (!US_STATES.some(s => s.code === state)) notFound()
+
+  let companies: unknown[] = []
+  let count = 0
+  let relatedCities: string[] = []
+
+  if (isSupabaseConfigured() && supabaseAdmin) {
+    const [res, chipsRes] = await Promise.all([
+      supabaseAdmin
+        .from('companies')
+        .select('*')
+        .ilike('city', city)
+        .eq('state', state)
+        .eq('active', true)
+        .order('rating', { ascending: false })
+        .limit(20),
+      supabaseAdmin
+        .from('companies')
+        .select('city')
+        .eq('state', state)
+        .eq('active', true)
+        .limit(200),
+    ])
+    companies = res.data || []
+    count = res.count || companies.length
+
+    const allCities = [...new Set(
+      (chipsRes.data || [])
+        .map((c: { city: string }) => c.city)
+        .filter(Boolean)
+    )] as string[]
+    relatedCities = allCities
+      .filter(c => c.toLowerCase() !== city.toLowerCase())
+      .slice(0, 8)
+  }
+
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'Home', 
+        item: 'https://commercialcleaningnearme.com' },
+      { '@type': 'ListItem', position: 2, 
+        name: `Commercial Cleaning Near Me — ${city}, ${stateName}`,
+        item: `https://commercialcleaningnearme.com/commercial-cleaning-near-me/${params.location}` },
+    ],
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <script type="application/ld+json" 
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <main className="flex-1 bg-gray-50">
+        <div className="bg-white border-b border-gray-200 py-10">
+          <div className="max-w-5xl mx-auto px-4">
+            <nav className="text-xs text-gray-400 mb-3">
+              <Link href="/" className="hover:text-accent">Home</Link>
+              {' / '}
+              <Link 
+                href={`/commercial-cleaning/${stateName.toLowerCase().replace(/\s+/g, '-')}`}
+                className="hover:text-accent"
+              >
+                {stateName}
+              </Link>
+              {' / '}
+              Commercial Cleaning Near Me
+            </nav>
+            <h1 className="text-3xl font-bold text-navy mb-3">
+              Commercial Cleaning Near Me in {city}, {stateName}
+            </h1>
+            <p className="text-gray-500">
+              {count > 0 
+                ? `${count.toLocaleString()} local commercial cleaning companies in ${city}.` 
+                : `Commercial cleaning companies serving ${city}.`
+              } Compare services, read reviews, and request free quotes.
+            </p>
+          </div>
+        </div>
+        <div className="max-w-5xl mx-auto px-4 py-8">
+          {relatedCities.length > 0 && (
+            <div className="mb-6">
+              <p className="text-sm font-medium text-gray-700 mb-2">
+                Also near {city}:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {relatedCities.map(c => (
+                  <Link
+                    key={c}
+                    href={`/commercial-cleaning-near-me/${c.toLowerCase().replace(/\s+/g, '-')}-${state.toLowerCase()}`}
+                    className="text-xs bg-white border border-gray-200 hover:border-accent text-gray-600 px-3 py-1.5 rounded-full transition-colors"
+                  >
+                    {c}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+          <PseoCompanyGrid 
+            companies={companies as Parameters<typeof PseoCompanyGrid>[0]['companies']} 
+          />
+          <div className="mt-8 text-center">
+            <Link
+              href={`/commercial-cleaning/${city.toLowerCase().replace(/\s+/g, '-')}-${state.toLowerCase()}`}
+              className="text-accent hover:underline text-sm"
+            >
+              View all cleaning companies in {city}, {stateName} →
+            </Link>
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </div>
+  )
+}
+
+===================================================================
+Fix P4 — Fix homepage service grid links to point to SEO pages
+===================================================================
+
+In app/page.tsx, find the service grid section. It currently links
+service cards to: href={`/search?service=${service.value}`}
+
+Replace with: href={`/service/${service.value}`}
+
+This routes users from the homepage into the pre-built SEO pages
+instead of the dynamic search. Internal link equity flows to 
+rankable pages, not a client-side filtered search.
+
+Also find the top states section. It currently links to:
+  href={`/commercial-cleaning/${stateSlug}`}
+
+This is already correct — keep it.
+
+===================================================================
+Fix P5 — Add cross-linking between the two parallel systems
+===================================================================
+
+In app/commercial-cleaning/[location]/page.tsx, add a "Browse by 
+Service" section at the bottom of the results, before the Footer.
+Add this after the companies grid and before the closing tags:
+
+{/* Browse by service in this location */}
+<div className="mt-10 bg-white border border-gray-200 rounded-xl p-6">
+  <h2 className="text-lg font-bold text-navy mb-1">
+    Browse by Service Type
+  </h2>
+  <p className="text-sm text-gray-500 mb-4">
+    Find specific cleaning services in {city || stateName}
+  </p>
+  <div className="flex flex-wrap gap-2">
+    {SERVICE_TYPES.map((s) => {
+      const href = isState
+        ? `/service/${s.value}/${location}`
+        : `/service/${s.value}/${location}`
+      return (
+        <Link
+          key={s.value}
+          href={href}
+          className="text-sm px-3 py-1.5 bg-blue-50 text-accent 
+            rounded-full hover:bg-blue-100 transition-colors"
+        >
+          {s.label}
+        </Link>
+      )
+    })}
+  </div>
+</div>
+
+In app/service/[service]/[location]/page.tsx, in both the state 
+branch and city branch, add a link back to the main 
+commercial-cleaning page. After the PseoCompanyGrid, add:
+
+<div className="mt-6 text-sm text-center text-gray-500">
+  <Link
+    href={`/commercial-cleaning/${params.location}`}
+    className="text-accent hover:underline"
+  >
+    Browse all cleaning companies in {isStatePage(params.location) 
+      ? stateName 
+      : `${city}, ${stateName}`} →
+  </Link>
+</div>
+
+===================================================================
+Fix P6 — Fix the sitemap to include all pSEO URL types
+===================================================================
+
+Replace the entire content of app/sitemap.xml/route.ts with:
+
+import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase'
+import { US_STATES, SERVICE_TYPES } from '@/lib/utils'
+
+export const revalidate = 86400
+
+export async function GET() {
+  const site = 'https://commercialcleaningnearme.com'
+
+  const [{ data: companies }, { data: locationData }] = 
+    await Promise.all([
+      supabaseAdmin
+        .from('companies')
+        .select('slug')
+        .eq('active', true)
+        .limit(10000),
+      supabaseAdmin
+        .from('companies')
+        .select('city, state')
+        .eq('active', true)
+        .limit(2000),
+    ])
+
+  // Build unique city slugs
+  const citySet = new Set<string>()
+  for (const c of locationData || []) {
+    if (c.city && c.state) {
+      citySet.add(
+        `${c.city.toLowerCase().replace(/\s+/g, '-')}-${c.state.toLowerCase()}`
+      )
+    }
+  }
+  const citySlugs = Array.from(citySet).slice(0, 1000)
+
+  const urls: string[] = []
+
+  const url = (loc: string, freq: string, pri: string) =>
+    `  <url><loc>${site}${loc}</loc><changefreq>${freq}</changefreq><priority>${pri}</priority></url>`
+
+  // Static pages
+  urls.push(url('/', 'daily', '1.0'))
+  urls.push(url('/search', 'weekly', '0.9'))
+  urls.push(url('/claim', 'weekly', '0.8'))
+  urls.push(url('/browse-by-service', 'weekly', '0.8'))
+  urls.push(url('/browse-by-state', 'weekly', '0.8'))
+
+  // Company profiles
+  for (const c of companies || []) {
+    if (c.slug) urls.push(url(`/company/${c.slug}`, 'monthly', '0.6'))
+  }
+
+  // commercial-cleaning state pages
+  for (const s of US_STATES) {
+    const slug = s.name.toLowerCase().replace(/\s+/g, '-')
+    urls.push(url(`/commercial-cleaning/${slug}`, 'weekly', '0.8'))
+    urls.push(url(`/state/${slug}`, 'weekly', '0.7'))
+  }
+
+  // commercial-cleaning city pages
+  for (const slug of citySlugs) {
+    urls.push(url(`/commercial-cleaning/${slug}`, 'weekly', '0.7'))
+    urls.push(url(`/commercial-cleaning-near-me/${slug}`, 'weekly', '0.7'))
+  }
+
+  // service hub pages
+  for (const svc of SERVICE_TYPES) {
+    urls.push(url(`/service/${svc.value}`, 'weekly', '0.8'))
+    // service + state pages
+    for (const s of US_STATES) {
+      const stateSlug = s.name.toLowerCase().replace(/\s+/g, '-')
+      urls.push(url(`/service/${svc.value}/${stateSlug}`, 'weekly', '0.7'))
+    }
+    // service + city pages
+    for (const slug of citySlugs.slice(0, 300)) {
+      urls.push(url(`/service/${svc.value}/${slug}`, 'weekly', '0.6'))
+    }
+  }
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join('\n')}
+</urlset>`
+
+  return new NextResponse(xml, {
+    headers: { 'Content-Type': 'application/xml' },
+  })
+}
+
+===================================================================
+Fix P7 — Fix the /state/[state] vs /commercial-cleaning overlap
+===================================================================
+
+The /state/[state] page and /commercial-cleaning/[state] page both 
+exist for every state and compete for the same keywords.
+
+The /state/[state] page serves a specific purpose — it's a service 
+hub that shows "Office Cleaning in Texas (450 companies)" etc. It 
+does NOT show individual company listings. Keep it, but add a 
+canonical tag so Google knows /commercial-cleaning/[state] is the 
+primary page.
+
+In app/state/[state]/page.tsx, add to the generateMetadata function:
+
+return {
+  title: `...(existing)...`,
+  description: `...(existing)...`,
+  alternates: {
+    canonical: `https://commercialcleaningnearme.com/commercial-cleaning/${params.state}`,
+  },
+}
+
+And change the H1 from:
+  "Commercial Cleaning Services in {state.name}"
+To:
+  "Commercial Cleaning Services in {state.name} — Browse by Type"
+
+This differentiates the pages: /commercial-cleaning/texas is the 
+company listing page, /state/texas is the service directory page.
+
+===================================================================
+VERIFICATION CHECKLIST for pSEO fixes
+===================================================================
+
+1. Run: npm run build
+   Build should complete without timeout (under 20 min).
+   Look for "Generated static pages" in build output — you should
+   see hundreds of pages being pre-built, not just 50.
+
+2. After build, visit /commercial-cleaning/texas in browser.
+   Right-click → View Page Source. The HTML should contain actual
+   company names in the markup, not just JavaScript. If you see 
+   company names in the raw HTML, the page is pre-rendered. 
+   If you only see a <script> tag, it's still dynamic.
+
+3. Visit /sitemap.xml — count the URL entries. Should be 5,000+
+   not the current ~2,100.
+
+4. Visit /commercial-cleaning/austin-tx — confirm it shows Austin
+   companies, has the "Browse by Service Type" chips at the bottom,
+   and has a breadcrumb showing Home > Texas > Austin.
+
+5. Visit /service/office/austin-tx — confirm it shows office 
+   cleaning companies in Austin and has a link back to the main
+   /commercial-cleaning/austin-tx page.
+
+6. Visit /commercial-cleaning-near-me/austin-tx — confirm it shows
+   companies, has related city chips, and links to the main 
+   /commercial-cleaning/austin-tx page.
+
+7. Submit /sitemap.xml in Google Search Console after deploying.
