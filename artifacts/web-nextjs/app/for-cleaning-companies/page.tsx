@@ -7,46 +7,55 @@ const PLANS = [
     name: 'Pay Per Lead',
     price: '$35',
     per: 'per lead',
-    desc: 'Perfect for getting started. Only pay when you want to contact a facility manager.',
+    desc: 'No commitment. Pay only when you want to contact a facility manager.',
     features: [
-      'Unlock one lead at a time',
-      'Full contact info: name, phone, email',
-      'See building size, service type, frequency',
-      'No monthly commitment',
+      'Unlock full contact details per lead',
+      'See service type, building size, frequency',
+      'No monthly fee',
     ],
     cta: 'Claim Free Listing',
     href: '/claim',
     highlight: false,
   },
   {
-    name: 'Growth',
-    price: '$199',
+    name: 'Essentials',
+    price: '$149',
     per: '/month',
-    desc: 'Most popular. Get 8 leads delivered automatically every month without lifting a finger.',
+    desc: 'Leads delivered automatically plus the full automation suite running in the background.',
     features: [
-      '8 leads per month, auto-delivered',
-      'Featured badge on your listing',
-      'Priority placement in search results',
+      'Free leads included — shared, up to 3 companies',
+      'Automated SMS follow-up within 2 minutes of every lead',
+      'Missed call text back — no lead falls through',
+      'Automated review request sequences',
+      'Appointment booking sent automatically when prospects respond',
+      'Monthly performance report',
+      'Boosted directory ranking',
       'Cancel anytime',
     ],
-    cta: 'Start Growth Plan',
-    href: '/claim',
-    highlight: true,
-  },
-  {
-    name: 'Unlimited',
-    price: '$399',
-    per: '/month',
-    desc: 'Scale fast. Get every lead in your state the moment it comes in.',
-    features: [
-      'All leads in your state, unlimited',
-      'First priority on every new lead',
-      'Dedicated account support',
-      'Cancel anytime',
-    ],
-    cta: 'Start Unlimited',
+    cta: 'Start Essentials',
     href: '/claim',
     highlight: false,
+  },
+  {
+    name: 'Growth',
+    price: '$349',
+    per: '/month',
+    desc: 'Everything in Essentials plus semi-exclusive leads and active management of your Google presence.',
+    features: [
+      'Free leads included — semi-exclusive, max 2 companies',
+      'Everything in Essentials',
+      'Google Business Profile management — 4 posts/month',
+      'Review response management within 48 hours',
+      'Full pipeline dashboard — track every lead',
+      '90-day nurture sequences for cold prospects',
+      'Reactivation campaigns to past clients twice yearly',
+      'Two-way SMS from your business number',
+      'Optional monthly strategy call',
+      'Cancel anytime',
+    ],
+    cta: 'Start Growth',
+    href: '/claim',
+    highlight: true,
   },
 ]
 
@@ -64,7 +73,7 @@ const HOW_IT_WORKS = [
   {
     step: '03',
     title: 'You Unlock Contact Details',
-    desc: 'When a facility manager in your area requests a quote and selects your company, you get notified. Pay $35 to unlock their contact info, or subscribe for automatic delivery.',
+    desc: 'When a facility manager in your area requests a quote and selects your company, you get notified. Pay per lead to unlock their contact info, or subscribe for automatic delivery.',
   },
   {
     step: '04',
@@ -75,7 +84,7 @@ const HOW_IT_WORKS = [
 
 const TESTIMONIALS = [
   {
-    quote: 'We picked up a $3,200/month janitorial contract from our first lead. The ROI on a $35 unlock is incredible.',
+    quote: 'We picked up a $3,200/month janitorial contract from our first lead. The ROI is incredible.',
     name: 'Marcus T.',
     company: 'Chicago Facility Services',
   },
@@ -133,7 +142,7 @@ export default function ForCleaningCompaniesPage() {
           {[
             { value: '10,000+', label: 'Companies Listed' },
             { value: 'All 50', label: 'States Covered' },
-            { value: '$35', label: 'Per Lead Unlock' },
+            { value: 'From $25', label: 'Per Lead Unlock' },
             { value: '100%', label: 'Contract Value Yours' },
           ].map((s) => (
             <div key={s.label}>
@@ -250,12 +259,12 @@ export default function ForCleaningCompaniesPage() {
                 a: 'Leads are facility managers and property managers requesting quotes for commercial cleaning — office buildings, medical offices, warehouses, schools, retail spaces, and more. Each lead includes service type, building size, frequency, and their contact info once unlocked.',
               },
               {
-                q: 'How quickly do leads come in?',
-                a: 'It depends on your market and service type. Most active markets (major US cities) see new leads daily. Rural markets may see 2-5 per week. You can filter your notifications by city, state, or service type.',
+                q: 'How does lead pricing work?',
+                a: 'Lead price depends on exclusivity. Exclusive leads (sent to only your company) are $45. Semi-exclusive leads (max 2 companies) are $35. Shared leads (up to 3 companies) are $25. Subscribers receive leads automatically based on their plan.',
               },
               {
                 q: 'Do I compete with other cleaning companies for the same lead?',
-                a: 'Yes — facility managers typically select up to 3 companies to receive quotes from. If they selected your company, you have a real shot at the contract. You\'ll know upfront which service they need and the building details.',
+                a: 'It depends on the lead type. Exclusive leads go to you only. Semi-exclusive leads go to you and one other company. Shared leads go to up to 3 companies. You\'ll know the type before you pay.',
               },
               {
                 q: 'What if I\'m not listed in the directory yet?',

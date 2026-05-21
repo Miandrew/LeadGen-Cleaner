@@ -105,6 +105,7 @@ CREATE TABLE IF NOT EXISTS leads (
   message               text,
   selected_company_ids  uuid[],
   status                text DEFAULT 'open',
+  lead_type             text, -- 'exclusive' | 'semi-exclusive' | 'shared'
   created_at            timestamp DEFAULT now()
 );
 

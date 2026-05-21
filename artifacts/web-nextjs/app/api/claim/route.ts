@@ -67,7 +67,7 @@ export async function POST(req: NextRequest) {
           `<div style="font-family:sans-serif;max-width:600px">
             <p>Hi ${firstName},</p>
             <p>Your listing is now live. Facility managers in ${company.city} are actively searching.</p>
-            <p>Leads available from $35 each in your dashboard.</p>
+            <p>Leads available from $25 each in your dashboard.</p>
             <a href="${siteUrl}/dashboard/leads" style="display:inline-block;background:#1B3A6B;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">View Available Leads</a>
           </div>`
         )
@@ -96,7 +96,21 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    return NextResponse.json({ success: true })
+    // Sign the user in so they land on dashboard with an active session
+    const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (signInError) {
+      console.error('Sign in after claim failed:', signInError)
+      return NextResponse.json({ success: true, requiresLogin: true })
+    }
+
+    return NextResponse.json({
+      success: true,
+      session: signInData.session,
+    })
   } catch (err) {
     console.error('Claim error:', err)
     return NextResponse.json({ error: 'Internal server error.' }, { status: 500 })

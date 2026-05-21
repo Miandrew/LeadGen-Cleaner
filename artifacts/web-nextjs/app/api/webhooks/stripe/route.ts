@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   try {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object as Stripe.Checkout.Session
-      const { lead_id, company_id } = session.metadata || {}
+      const { lead_id, company_id, lead_type } = session.metadata || {}
 
       if (lead_id && company_id && session.mode === 'payment') {
         await supabaseAdmin.from('lead_purchases').upsert(
@@ -36,29 +36,51 @@ export async function POST(req: NextRequest) {
 
         if (lead && company?.email) {
           const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+          const amountDisplay = `$${((session.amount_total || 3500) / 100).toFixed(2)}`
           await sendEmail(
             company.email,
-            'Receipt — Lead Contact Details Unlocked',
-            `<p>You've successfully unlocked a lead contact for $35.</p>
+            `Receipt — Lead Contact Details Unlocked`,
+            `<p>You've successfully unlocked a lead contact for ${amountDisplay}.</p>
              <a href="${siteUrl}/lead-unlocked/${lead_id}/${company_id}">View Contact Details</a>`
           )
         }
 
         await sendEmail(
           process.env.ADMIN_EMAIL!,
-          `Lead purchased — $35`,
-          `<p>Company ${company?.name} purchased lead ${lead_id} for $35.</p>`
+          `Lead purchased — $${((session.amount_total || 3500) / 100).toFixed(2)} (${lead_type || 'shared'})`,
+          `<p>Company ${company?.name} purchased lead ${lead_id} (${lead_type || 'shared'}) for $${((session.amount_total || 3500) / 100).toFixed(2)}.</p>`
         )
       }
 
       if (session.mode === 'subscription' && session.metadata?.company_id) {
-        const { company_id, tier } = session.metadata
-        const leadsMap: Record<string, number> = { starter: 3, growth: 8, unlimited: 999 }
-        await supabaseAdmin.from('users').update({
-          subscription_status: 'active',
-          subscription_tier: tier,
-          leads_remaining: leadsMap[tier] || 0,
-        }).eq('company_id', company_id)
+        const { company_id, tier, placement_type } = session.metadata
+
+        // Handle featured listing subscriptions
+        if (placement_type) {
+          const { data: company } = await supabaseAdmin
+            .from('companies')
+            .select('city, state')
+            .eq('id', company_id)
+            .single()
+
+          await supabaseAdmin.from('featured_listings').insert({
+            company_id,
+            placement_type,
+            city: company?.city,
+            state: company?.state,
+            stripe_subscription_id: session.subscription as string,
+            active: true,
+            starts_at: new Date().toISOString(),
+          })
+        } else {
+          // Standard subscription tier
+          const leadsMap: Record<string, number> = { essentials: 5, growth: 10, starter: 3, unlimited: 999 }
+          await supabaseAdmin.from('users').update({
+            subscription_status: 'active',
+            subscription_tier: tier,
+            leads_remaining: leadsMap[tier] || 0,
+          }).eq('company_id', company_id)
+        }
       }
     }
 
@@ -68,7 +90,7 @@ export async function POST(req: NextRequest) {
       if (company_id) {
         const priceId = sub.items.data[0]?.price?.id
         const tier = getPlanTier(priceId)
-        const leadsMap: Record<string, number> = { starter: 3, growth: 8, unlimited: 999 }
+        const leadsMap: Record<string, number> = { essentials: 5, growth: 10, starter: 3, unlimited: 999 }
         await supabaseAdmin.from('users').update({
           subscription_status: 'active',
           subscription_tier: tier,
@@ -78,14 +100,20 @@ export async function POST(req: NextRequest) {
     }
 
     if (event.type === 'customer.subscription.deleted') {
-      const sub = event.data.object as Stripe.Subscription
-      const company_id = sub.metadata?.company_id
+      const deletedSub = event.data.object as Stripe.Subscription
+      const company_id = deletedSub.metadata?.company_id
       if (company_id) {
         await supabaseAdmin.from('users').update({
           subscription_status: 'cancelled',
           leads_remaining: 0,
         }).eq('company_id', company_id)
       }
+
+      // Deactivate featured listings when subscription cancelled
+      await supabaseAdmin
+        .from('featured_listings')
+        .update({ active: false })
+        .eq('stripe_subscription_id', deletedSub.id)
     }
 
     if (event.type === 'invoice.payment_failed') {
@@ -117,8 +145,9 @@ export async function POST(req: NextRequest) {
 }
 
 function getPlanTier(priceId: string | undefined): string {
-  if (priceId === process.env.STRIPE_STARTER_PRICE_ID) return 'starter'
+  if (priceId === process.env.STRIPE_ESSENTIALS_PRICE_ID) return 'essentials'
   if (priceId === process.env.STRIPE_GROWTH_PRICE_ID) return 'growth'
+  if (priceId === process.env.STRIPE_STARTER_PRICE_ID) return 'starter'
   if (priceId === process.env.STRIPE_UNLIMITED_PRICE_ID) return 'unlimited'
-  return 'starter'
+  return 'essentials'
 }

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Header from '@/components/Header'
+import { supabase } from '@/lib/supabase'
 
 interface Company {
   id: string
@@ -69,6 +70,12 @@ export default function ClaimPage() {
       })
       const data = await res.json()
       if (data.success) {
+        if (data.session && supabase) {
+          await supabase.auth.setSession({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token,
+          })
+        }
         router.push('/dashboard')
       } else {
         setError(data.error || 'Something went wrong.')

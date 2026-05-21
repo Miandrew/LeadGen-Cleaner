@@ -1,0 +1,282 @@
+You are working on the CommercialCleaningNearMe.com Next.js 14 app. I need you to fix four critical bugs and then implement several missing features. Work through these in exact order — do not skip ahead. Test each fix before moving to the next.
+
+CRITICAL BUG FIXES — Do These First
+Fix 1 — Add lead_type to the leads table and populate on insert
+In supabase/schema.sql, add this column to the leads table:
+sqllead_type text, -- 'exclusive' | 'semi-exclusive' | 'shared'
+Also run this migration in Supabase SQL Editor:
+sqlALTER TABLE leads ADD COLUMN IF NOT EXISTS lead_type text;
+In app/api/leads/create/route.ts, calculate lead_type before the insert and include it:
+typescriptconst lead_type = 
+  selected_company_ids.length === 1 ? 'exclusive' :
+  selected_company_ids.length === 2 ? 'semi-exclusive' : 'shared'
+Add lead_type to the insert object.
+
+Fix 2 — Fix Stripe checkout pricing based on lead_type
+In app/api/create-checkout-session/route.ts, the current code hardcodes unit_amount: 3500 for every lead. Replace this logic entirely.
+The route currently receives lead_id and company_id. It needs to also receive lead_type (pass it from the unlock page). Calculate the correct price:
+typescriptconst priceMap: Record<string, number> = {
+  exclusive: 4500,
+  'semi-exclusive': 3500,
+  shared: 2500,
+}
+const unit_amount = priceMap[lead_type] ?? 3500
+Use unit_amount in the Stripe session line_items. Also update the product name to reflect the type: Lead Contact Details — ${lead_type.charAt(0).toUpperCase() + lead_type.slice(1)}.
+Update app/unlock-lead/[lead_id]/[company_id]/page.tsx and UnlockButton.tsx to:
+
+Fetch the lead's lead_type from Supabase
+Display the correct price to the company ($45, $35, or $25)
+Pass lead_type to the checkout session API call
+
+
+Fix 3 — Fix notification emails to show correct price per lead type
+In app/api/leads/create/route.ts, the email to each cleaning company currently hardcodes "Unlock Full Contact Details — $35".
+Calculate the display price before sending emails:
+typescriptconst priceDisplay = 
+  selected_company_ids.length === 1 ? '$45' :
+  selected_company_ids.length === 2 ? '$35' : '$25'
+Replace the hardcoded $35 in the email button text with ${priceDisplay}. Also update the email subject to include lead type: New ${lead_type.charAt(0).toUpperCase() + lead_type.slice(1)} Lead — ${service_type} in ${city}, ${state}.
+
+Fix 4 — Fix authentication after claim flow (most critical UX bug)
+In app/api/claim/route.ts, after all the database inserts and emails are sent, the route currently just returns { success: true }. The user is never signed in.
+Add this block before the return statement:
+typescript// Sign the user in so they land on dashboard with an active session
+const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+  email,
+  password,
+})
+
+if (signInError) {
+  console.error('Sign in after claim failed:', signInError)
+  // Don't fail the claim — just return success and let them log in manually
+  return NextResponse.json({ success: true, requiresLogin: true })
+}
+
+// Return the session tokens so the client can set the session
+return NextResponse.json({ 
+  success: true, 
+  session: signInData.session 
+})
+In app/claim/[slug]/page.tsx, update the submitClaim function to handle the session after a successful claim:
+typescriptconst submitClaim = async () => {
+  setLoading(true)
+  setError('')
+  try {
+    const res = await fetch('/api/claim', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...form, company_id: company?.id, slug }),
+    })
+    const data = await res.json()
+    if (data.success) {
+      if (data.session && supabase) {
+        // Set the session on the client so dashboard auth check passes
+        await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        })
+      }
+      router.push('/dashboard')
+    } else {
+      setError(data.error || 'Something went wrong.')
+    }
+  } catch {
+    setError('Network error. Please try again.')
+  } finally {
+    setLoading(false)
+  }
+}
+Make sure supabase is imported from @/lib/supabase in the claim page.
+
+FEATURE ADDITIONS — Do These After All 4 Bugs Are Fixed
+Feature 1 — Fix the subscription landing page pricing
+In app/for-cleaning-companies/page.tsx, replace the current PLANS array with:
+typescriptconst PLANS = [
+  {
+    name: 'Pay Per Lead',
+    price: '$35',
+    per: 'per lead',
+    desc: 'No commitment. Pay only when you want to contact a facility manager.',
+    features: [
+      'Unlock full contact details per lead',
+      'See service type, building size, frequency',
+      'No monthly fee',
+    ],
+    cta: 'Claim Free Listing',
+    href: '/claim',
+    highlight: false,
+  },
+  {
+    name: 'Essentials',
+    price: '$149',
+    per: '/month',
+    desc: 'Leads delivered automatically plus the full automation suite running in the background.',
+    features: [
+      'Free leads included — shared, up to 3 companies',
+      'Automated SMS follow-up within 2 minutes of every lead',
+      'Missed call text back — no lead falls through',
+      'Automated review request sequences',
+      'Appointment booking sent automatically when prospects respond',
+      'Monthly performance report',
+      'Boosted directory ranking',
+      'Cancel anytime',
+    ],
+    cta: 'Start Essentials',
+    href: '/claim',
+    highlight: false,
+  },
+  {
+    name: 'Growth',
+    price: '$349',
+    per: '/month',
+    desc: 'Everything in Essentials plus semi-exclusive leads and active management of your Google presence.',
+    features: [
+      'Free leads included — semi-exclusive, max 2 companies',
+      'Everything in Essentials',
+      'Google Business Profile management — 4 posts/month',
+      'Review response management within 48 hours',
+      'Full pipeline dashboard — track every lead',
+      '90-day nurture sequences for cold prospects',
+      'Reactivation campaigns to past clients twice yearly',
+      'Two-way SMS from your business number',
+      'Optional monthly strategy call',
+      'Cancel anytime',
+    ],
+    cta: 'Start Growth',
+    href: '/claim',
+    highlight: true,
+  },
+]
+Also update the dashboard subscription page app/dashboard/subscription/page.tsx with the same corrected plans (Essentials $149, Growth $349). Remove the Unlimited plan from the subscription page for now. Update the PLANS array and ensure the priceId fields reference NEXT_PUBLIC_STRIPE_ESSENTIALS_PRICE_ID and NEXT_PUBLIC_STRIPE_GROWTH_PRICE_ID.
+Add these new env vars to .env.local:
+NEXT_PUBLIC_STRIPE_ESSENTIALS_PRICE_ID=your_essentials_price_id
+NEXT_PUBLIC_STRIPE_GROWTH_PRICE_ID=your_growth_price_id
+
+Feature 2 — Build the featured listings dashboard page
+Create app/dashboard/featured/page.tsx. This is a client component.
+It should show three featured listing options as cards:
+City Featured — $49/month: "Appear at the top of search results in [their city]." Button: "Get City Featured". On click, POST to /api/subscribe with { plan_id: process.env.NEXT_PUBLIC_STRIPE_CITY_FEATURED_PRICE_ID, tier: 'city_featured', placement_type: 'city' }.
+State Featured — $99/month: "Appear at the top of all results across [their state]." Button: "Get State Featured". Same subscribe flow with tier: 'state_featured', placement_type: 'state'.
+Homepage Featured — $199/month: "Appear in the Featured Companies section on the homepage. Limited to 6 spots nationally." Show current count of active homepage featured slots from a fetch to Supabase. Button: "Get Homepage Featured". Same flow with tier: 'homepage_featured', placement_type: 'homepage'.
+Fetch the current user's company city and state from Supabase auth session and show them in the card descriptions. Show an "Active" badge if the company already has that placement type active in the featured_listings table.
+Add these env vars to .env.local:
+NEXT_PUBLIC_STRIPE_CITY_FEATURED_PRICE_ID=your_city_featured_price_id
+NEXT_PUBLIC_STRIPE_STATE_FEATURED_PRICE_ID=your_state_featured_price_id
+NEXT_PUBLIC_STRIPE_HOMEPAGE_FEATURED_PRICE_ID=your_homepage_featured_price_id
+Update app/api/webhooks/stripe/route.ts to handle featured listing subscriptions. In the checkout.session.completed handler, after the existing subscription tier logic, add:
+typescriptif (session.mode === 'subscription' && session.metadata?.placement_type) {
+  const { company_id, placement_type } = session.metadata
+  const { data: company } = await supabaseAdmin
+    .from('companies')
+    .select('city, state')
+    .eq('id', company_id)
+    .single()
+  
+  await supabaseAdmin.from('featured_listings').insert({
+    company_id,
+    placement_type,
+    city: company?.city,
+    state: company?.state,
+    stripe_subscription_id: session.subscription as string,
+    active: true,
+    starts_at: new Date().toISOString(),
+  })
+}
+In the customer.subscription.deleted handler, add:
+typescript// Deactivate featured listings when subscription cancelled
+const deletedSub = event.data.object as Stripe.Subscription
+await supabaseAdmin
+  .from('featured_listings')
+  .update({ active: false })
+  .eq('stripe_subscription_id', deletedSub.id)
+
+Feature 3 — Add dashboard sidebar navigation layout
+Create app/dashboard/layout.tsx as a server component:
+typescriptimport { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import Link from 'next/link'
+import Header from '@/components/Header'
+import { createSupabaseServerClient, isSupabaseConfigured } from '@/lib/supabase'
+
+const NAV_ITEMS = [
+  { href: '/dashboard', label: 'Overview', icon: '⊞' },
+  { href: '/dashboard/listing', label: 'My Listing', icon: '✎' },
+  { href: '/dashboard/leads', label: 'Leads', icon: '✉' },
+  { href: '/dashboard/subscription', label: 'Subscription', icon: '★' },
+  { href: '/dashboard/featured', label: 'Featured', icon: '◈' },
+]
+
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  if (!isSupabaseConfigured()) redirect('/login')
+  
+  const cookieStore = cookies()
+  const supabase = createSupabaseServerClient((name) => cookieStore.get(name)?.value)
+  if (!supabase) redirect('/login')
+  
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session) redirect('/login')
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <div className="flex flex-1">
+        {/* Sidebar */}
+        <aside className="hidden md:flex w-52 flex-col bg-white border-r border-gray-200 py-6 px-3 shrink-0">
+          <nav className="flex flex-col gap-1">
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+              >
+                <span className="text-base">{item.icon}</span>
+                {item.label}
+              </Link>
+            ))}
+          </nav>
+          <div className="mt-auto">
+            <form action="/api/logout" method="POST">
+              <button className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-600 w-full transition-colors">
+                <span>⇥</span> Log Out
+              </button>
+            </form>
+          </div>
+        </aside>
+        {/* Main content */}
+        <main className="flex-1 bg-gray-50 p-6 overflow-auto">
+          {children}
+        </main>
+      </div>
+    </div>
+  )
+}
+Remove the <Header /> import and usage from the individual dashboard page files (dashboard/page.tsx, dashboard/leads/page.tsx, dashboard/listing/page.tsx, dashboard/subscription/page.tsx) since the layout now handles that. Also remove the outer min-h-screen flex flex-col wrapper divs from those pages — the layout provides the shell.
+Create app/api/logout/route.ts:
+typescriptimport { NextResponse } from 'next/server'
+
+export async function POST() {
+  const res = NextResponse.redirect(new URL('/login', process.env.NEXT_PUBLIC_SITE_URL))
+  res.cookies.set('sb-access-token', '', { maxAge: 0 })
+  res.cookies.set('sb-refresh-token', '', { maxAge: 0 })
+  return res
+}
+
+Feature 4 — Add available leads count to dashboard overview
+In app/dashboard/page.tsx, add this query alongside the existing data fetches:
+typescriptconst { count: availableLeadsCount } = await supabaseAdmin
+  .from('leads')
+  .select('*', { count: 'exact', head: true })
+  .eq('status', 'open')
+  .ilike('city', `%${company.city}%`)
+  .gte('created_at', new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString())
+Then in the stats cards section, replace the placeholder "Listing Views" card with a real "Leads Available Near You" card showing availableLeadsCount || 0 with a link to /dashboard/leads.
+
+After All Fixes Are Applied
+Verify these things work end to end:
+
+Submit a quote with 1 company selected — confirm Stripe shows $45
+Submit a quote with 3 companies selected — confirm Stripe shows $25
+Complete the full claim flow for an unclaimed company — confirm you land on /dashboard logged in without needing to log in again
+Check that the leads table in Supabase has a lead_type column populated correctly after step 1 and 3
+Confirm the dashboard shows sidebar navigation on desktop
+Confirm /dashboard/featured page loads and shows the three featured options
