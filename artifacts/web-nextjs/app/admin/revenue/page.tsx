@@ -35,8 +35,9 @@ export default async function AdminRevenuePage() {
   const avgLead = allPurchases && allPurchases.length > 0 ? totalRevenue / allPurchases.length : 0
 
   const companySpend: Record<string, { name: string; total: number }> = {}
-  ;(topCompanies || []).forEach((p: { company_id: string; amount_paid: number; companies: { name: string } | null }) => {
-    if (!companySpend[p.company_id]) companySpend[p.company_id] = { name: p.companies?.name || 'Unknown', total: 0 }
+  ;(topCompanies || []).forEach((p: { company_id: string; amount_paid: number; companies: { name: string } | { name: string }[] | null }) => {
+    const companyName = Array.isArray(p.companies) ? p.companies[0]?.name : p.companies?.name
+    if (!companySpend[p.company_id]) companySpend[p.company_id] = { name: companyName || 'Unknown', total: 0 }
     companySpend[p.company_id].total += p.amount_paid
   })
   const topTen = Object.values(companySpend).sort((a, b) => b.total - a.total).slice(0, 10)

@@ -145,7 +145,7 @@ export default function AdminCompaniesClient() {
               {([['name', 'Name'], ['city', 'City'], ['state', 'State'], ['email', 'Email'], ['phone', 'Phone'], ['website', 'Website']] as const).map(([k, label]) => (
                 <div key={k}>
                   <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
-                  <input className={inputCls} value={(editing as Record<string, string>)[k] || ''} onChange={(e) => setEditing({ ...editing, [k]: e.target.value })} />
+                  <input className={inputCls} value={(editing as unknown as Record<string, string>)[k] || ''} onChange={(e) => setEditing({ ...editing, [k]: e.target.value })} />
                 </div>
               ))}
               <div>

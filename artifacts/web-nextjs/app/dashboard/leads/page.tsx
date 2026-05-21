@@ -60,8 +60,14 @@ export default function DashboardLeadsPage() {
           .order('purchased_at', { ascending: false }),
       ])
 
-      setAvailableLeads(avail || [])
-      setPurchasedLeads(purchased || [])
+      setAvailableLeads((avail || []) as Lead[])
+      const normalizedPurchased: Purchase[] = (purchased || []).map((p: { id: string; purchased_at: string; amount_paid: number; leads: Lead | Lead[] | null }) => ({
+        id: p.id,
+        purchased_at: p.purchased_at,
+        amount_paid: p.amount_paid,
+        leads: Array.isArray(p.leads) ? p.leads[0] || null : p.leads,
+      }))
+      setPurchasedLeads(normalizedPurchased)
       setLoading(false)
     })
   }, [router])
