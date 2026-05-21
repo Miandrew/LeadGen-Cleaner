@@ -36,6 +36,12 @@ export default function Header() {
                 {link.label}
               </Link>
             ))}
+            <Link
+              href="/search"
+              className="bg-accent text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-accent/90 transition-colors whitespace-nowrap"
+            >
+              Get Free Quotes
+            </Link>
           </nav>
 
           <button
@@ -77,6 +83,13 @@ export default function Header() {
                   {link.label}
                 </Link>
               ))}
+              <Link
+                href="/search"
+                onClick={() => setMobileOpen(false)}
+                className="px-4 py-3 rounded-lg text-sm font-semibold bg-accent text-white text-center"
+              >
+                Get Free Quotes
+              </Link>
             </nav>
           </div>
         </div>

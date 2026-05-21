@@ -225,3 +225,17 @@ CREATE TABLE IF NOT EXISTS call_routing_responses (
 CREATE INDEX IF NOT EXISTS call_routing_company_idx ON call_routing_responses(company_id);
 CREATE INDEX IF NOT EXISTS call_routing_segment_idx ON call_routing_responses(segment);
 CREATE INDEX IF NOT EXISTS call_routing_action_idx  ON call_routing_responses(action);
+
+-- Facility manager review follow-ups (sent 14 days after lead submission)
+CREATE TABLE IF NOT EXISTS facility_followups (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id     uuid REFERENCES leads(id),
+  email       text NOT NULL,
+  name        text,
+  city        text,
+  send_after  timestamptz NOT NULL,
+  sent        boolean DEFAULT false,
+  created_at  timestamptz DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS followup_send_idx ON facility_followups(send_after, sent);

@@ -41,6 +41,14 @@ export async function POST(req: NextRequest) {
 
     if (insertError) throw insertError
 
+    await supabaseAdmin.from('facility_followups').insert({
+      lead_id: lead.id,
+      email: contact_email,
+      name: contact_name,
+      city,
+      send_after: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+    }).then(() => {}, () => {})
+
     const { data: companies } = await supabaseAdmin
       .from('companies')
       .select('id, name, email, city, state, do_not_email')

@@ -33,6 +33,7 @@ export default function DashboardLeadsPage() {
   const [company, setCompany] = useState<{ id: string; city: string; state: string } | null>(null)
   const [availableLeads, setAvailableLeads] = useState<Lead[]>([])
   const [purchasedLeads, setPurchasedLeads] = useState<Purchase[]>([])
+  const [usingStateFallback, setUsingStateFallback] = useState(false)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -46,19 +47,32 @@ export default function DashboardLeadsPage() {
 
       const cutoff = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()
 
-      const [{ data: avail }, { data: purchased }] = await Promise.all([
-        supabase
+      let { data: avail } = await supabase
+        .from('leads')
+        .select('id, service_type, building_type, city, state, created_at')
+        .eq('status', 'open')
+        .gte('created_at', cutoff)
+        .ilike('city', `%${c?.city || ''}%`)
+        .eq('state', c?.state || '')
+        .order('created_at', { ascending: false })
+
+      if (!avail || avail.length === 0) {
+        const { data: stateLeads } = await supabase
           .from('leads')
           .select('id, service_type, building_type, city, state, created_at')
           .eq('status', 'open')
           .gte('created_at', cutoff)
-          .or(`city.ilike.%${c?.city || ''}%,state.eq.${c?.state || ''}`),
-        supabase
-          .from('lead_purchases')
-          .select('id, purchased_at, amount_paid, leads(id, service_type, building_type, city, state, contact_name, contact_email, contact_phone, business_name, message, created_at)')
-          .eq('company_id', user.company_id)
-          .order('purchased_at', { ascending: false }),
-      ])
+          .eq('state', c?.state || '')
+          .order('created_at', { ascending: false })
+        avail = stateLeads
+        setUsingStateFallback(true)
+      }
+
+      const { data: purchased } = await supabase
+        .from('lead_purchases')
+        .select('id, purchased_at, amount_paid, leads(id, service_type, building_type, city, state, contact_name, contact_email, contact_phone, business_name, message, created_at)')
+        .eq('company_id', user.company_id)
+        .order('purchased_at', { ascending: false })
 
       setAvailableLeads((avail || []) as Lead[])
       const normalizedPurchased: Purchase[] = (purchased || []).map((p: { id: string; purchased_at: string; amount_paid: number; leads: Lead | Lead[] | null }) => ({
@@ -101,6 +115,12 @@ export default function DashboardLeadsPage() {
             No new leads in your area in the last 72 hours.
           </div>
         ) : (
+          <>
+            {usingStateFallback && availableLeads.length > 0 && (
+              <div className="bg-blue-50 border border-blue-100 rounded-lg px-4 py-2.5 text-sm text-blue-700 mb-4">
+                No leads in {company?.city} in the last 72 hours — showing leads across {company?.state} instead.
+              </div>
+            )}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
@@ -119,7 +139,10 @@ export default function DashboardLeadsPage() {
                     <td className={tdCls}>{lead.service_type}</td>
                     <td className={tdCls}>{lead.building_type}</td>
                     <td className={tdCls}>{lead.city}, {lead.state}</td>
-                    <td className={`${tdCls} font-mono text-gray-400`}>••••••••</td>
+                    <td className={tdCls}>
+                      <span className="text-gray-400 font-mono text-xs">••••••••</span>
+                      <p className="text-xs text-gray-400 mt-0.5">Name, company, email &amp; phone</p>
+                    </td>
                     <td className={tdCls}>{getRelativeTime(lead.created_at)}</td>
                     <td className={tdCls}>
                       {company && (
@@ -136,6 +159,7 @@ export default function DashboardLeadsPage() {
               </tbody>
             </table>
           </div>
+          </>
         )
       ) : (
         purchasedLeads.length === 0 ? (

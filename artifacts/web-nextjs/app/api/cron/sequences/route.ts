@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendEmail } from '@/lib/resend'
 import { createHmac } from 'crypto'
@@ -13,7 +13,11 @@ const unsubscribeFooter = (companyId: string) =>
     <a href="${makeUnsubscribeUrl(companyId)}" style="color:#999">Unsubscribe</a> from all emails.
   </p>`
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get('authorization')
+  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   const now = new Date()
 
   const hot48hStart = new Date(now.getTime() - 49 * 60 * 60 * 1000).toISOString()
@@ -170,6 +174,32 @@ export async function GET() {
       </div>`
     )
     await supabaseAdmin.from('email_sequences').insert({ company_id: company.id, sequence_name: 'all_30d' })
+  }
+
+  const { data: facilityFollowups } = await supabaseAdmin
+    .from('facility_followups')
+    .select('*')
+    .eq('sent', false)
+    .lte('send_after', now.toISOString())
+    .limit(50)
+
+  for (const followup of facilityFollowups || []) {
+    const firstName = followup.name?.split(' ')[0] || 'there'
+    await sendEmail(
+      followup.email,
+      'Did you find a cleaning company through us?',
+      `<div style="font-family:sans-serif;max-width:600px;padding:20px">
+        <p>Hi ${firstName},</p>
+        <p>You submitted a cleaning quote request through CommercialCleaningNearMe.com about two weeks ago for ${followup.city}.</p>
+        <p>Did you end up finding a company that worked out?</p>
+        <p>If so, a quick review on your experience would go a long way — it helps other facility managers find good cleaners faster.</p>
+        <p style="margin-top:16px">
+          <a href="${process.env.NEXT_PUBLIC_SITE_URL}" style="color:#2563EB">→ Leave a review</a>
+        </p>
+        <p style="color:#999;font-size:12px;margin-top:24px">CommercialCleaningNearMe.com</p>
+      </div>`
+    )
+    await supabaseAdmin.from('facility_followups').update({ sent: true }).eq('id', followup.id)
   }
 
   return NextResponse.json({ success: true })

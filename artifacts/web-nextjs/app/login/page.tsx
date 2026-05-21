@@ -12,6 +12,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showForgot, setShowForgot] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotSent, setForgotSent] = useState(false)
+  const [forgotLoading, setForgotLoading] = useState(false)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,6 +28,16 @@ export default function LoginPage() {
     } else {
       router.push('/dashboard')
     }
+  }
+
+  const handleForgotPassword = async () => {
+    if (!forgotEmail) return
+    setForgotLoading(true)
+    await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setForgotSent(true)
+    setForgotLoading(false)
   }
 
   return (
@@ -59,6 +73,15 @@ export default function LoginPage() {
                   placeholder="••••••••"
                 />
               </div>
+              <div className="text-right -mt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowForgot(true)}
+                  className="text-xs text-gray-400 hover:text-accent transition-colors"
+                >
+                  Forgot password?
+                </button>
+              </div>
               {error && <p className="text-red-500 text-sm">{error}</p>}
               <button
                 type="submit"
@@ -68,6 +91,41 @@ export default function LoginPage() {
                 {loading ? 'Signing in…' : 'Sign In'}
               </button>
             </form>
+            {showForgot && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                {forgotSent ? (
+                  <p className="text-sm text-green-600 text-center">Reset link sent — check your email.</p>
+                ) : (
+                  <div className="flex flex-col gap-3">
+                    <p className="text-sm text-gray-600">Enter your email and we&apos;ll send a reset link.</p>
+                    <input
+                      type="email"
+                      value={forgotEmail}
+                      onChange={(e) => setForgotEmail(e.target.value)}
+                      placeholder="you@company.com"
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowForgot(false)}
+                        className="flex-1 border border-gray-300 text-gray-600 text-sm font-medium py-2 rounded-lg hover:bg-gray-100"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleForgotPassword}
+                        disabled={forgotLoading || !forgotEmail}
+                        className="flex-1 bg-navy text-white text-sm font-medium py-2 rounded-lg hover:bg-navy/90 disabled:bg-gray-300"
+                      >
+                        {forgotLoading ? 'Sending…' : 'Send Reset Link'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             <p className="text-center text-sm text-gray-500 mt-5">
               Don&apos;t have an account?{' '}
               <Link href="/claim" className="text-accent font-medium hover:underline">

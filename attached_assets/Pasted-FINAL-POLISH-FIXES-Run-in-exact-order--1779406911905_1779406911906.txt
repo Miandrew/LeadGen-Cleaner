@@ -1,0 +1,956 @@
+FINAL POLISH FIXES — Run in exact order.
+
+===================================================================
+Fix F1 — Remove "$35 each to unlock" from SelectionBar
+===================================================================
+
+In components/SelectionBar.tsx, find and delete this exact span:
+
+  <span className="text-gray-500 text-sm ml-2 hidden sm:inline">
+    — $35 each to unlock
+  </span>
+
+The bar should only show "[X] company/companies selected" and the 
+"Request Quotes →" button. Nothing else. Facility managers must 
+never see the $35 price — that is what cleaning companies pay, 
+not them.
+
+===================================================================
+Fix F2 — Fix available leads query to city-first, state-fallback
+===================================================================
+
+In app/dashboard/leads/page.tsx, find the available leads query:
+
+  supabase
+    .from('leads')
+    .select('id, service_type, building_type, city, state, created_at')
+    .eq('status', 'open')
+    .gte('created_at', cutoff)
+    .or(`city.ilike.%${c?.city || ''}%,state.eq.${c?.state || ''}`)
+
+This OR returns everything in the city AND everything in the state 
+simultaneously. A Dallas company sees Austin leads they'll never win.
+
+Replace with a two-step query:
+
+  // Step 1: try city-level leads first
+  let { data: avail } = await supabase
+    .from('leads')
+    .select('id, service_type, building_type, city, state, created_at')
+    .eq('status', 'open')
+    .gte('created_at', cutoff)
+    .ilike('city', `%${c?.city || ''}%`)
+    .eq('state', c?.state || '')
+    .order('created_at', { ascending: false })
+
+  let usingStateFallback = false
+
+  // Step 2: if no city leads, fall back to state-wide
+  if (!avail || avail.length === 0) {
+    const { data: stateLeads } = await supabase
+      .from('leads')
+      .select('id, service_type, building_type, city, state, created_at')
+      .eq('status', 'open')
+      .gte('created_at', cutoff)
+      .eq('state', c?.state || '')
+      .order('created_at', { ascending: false })
+    avail = stateLeads
+    usingStateFallback = true
+  }
+
+  setAvailableLeads(avail || [])
+
+Also add usingStateFallback to state:
+  const [usingStateFallback, setUsingStateFallback] = useState(false)
+
+And show a subtle note above the leads table when fallback is active:
+
+  {usingStateFallback && availableLeads.length > 0 && (
+    <div className="bg-blue-50 border border-blue-100 rounded-lg 
+      px-4 py-2.5 text-sm text-blue-700 mb-4">
+      No leads in {company?.city} in the last 72 hours — showing 
+      leads across {company?.state} instead.
+    </div>
+  )}
+
+===================================================================
+Fix F3 — Add value statement to available leads tab
+===================================================================
+
+In app/dashboard/leads/page.tsx, in the available leads table, 
+find the "Contact" column cell that shows "••••••••":
+
+  <td className={`${tdCls} font-mono text-gray-400`}>••••••••</td>
+
+Replace with:
+
+  <td className={tdCls}>
+    <span className="text-gray-400 font-mono text-xs">••••••••</span>
+    <p className="text-xs text-gray-400 mt-0.5">
+      Name, company, email & phone
+    </p>
+  </td>
+
+This single addition tells the cleaning company exactly what they 
+get when they unlock. Remove the mystery, reduce hesitation.
+
+===================================================================
+Fix F4 — Add "Get Free Quotes" CTA to Header
+===================================================================
+
+In components/Header.tsx, find the navLinks array:
+
+  const navLinks = [
+    { href: '/search', label: 'Browse Directory' },
+    { href: '/browse-by-service', label: 'By Service' },
+    { href: '/browse-by-state', label: 'By State' },
+    { href: '/for-cleaning-companies', label: 'For Cleaning Companies' },
+    { href: '/login', label: 'Login' },
+  ]
+
+Keep this array as-is for the mobile menu. For the desktop nav, 
+add a CTA button AFTER the navLinks map, inside the 
+hidden md:flex div:
+
+  <nav className="hidden md:flex items-center gap-6">
+    {navLinks.map((link) => (
+      ... existing links ...
+    ))}
+    {/* Add this button after the links */}
+    <Link
+      href="/search"
+      className="bg-accent text-white text-sm font-semibold 
+        px-4 py-2 rounded-lg hover:bg-accent/90 transition-colors 
+        whitespace-nowrap"
+    >
+      Get Free Quotes
+    </Link>
+  </nav>
+
+Also add to the mobile menu nav section, after the existing links:
+
+  <Link
+    href="/search"
+    onClick={() => setMobileOpen(false)}
+    className="px-4 py-3 rounded-lg text-sm font-semibold 
+      bg-accent text-white text-center"
+  >
+    Get Free Quotes
+  </Link>
+
+===================================================================
+Fix F5 — Add Forgot Password to login page
+===================================================================
+
+In app/login/page.tsx, add forgot password state and handler.
+
+Add to the existing state declarations:
+  const [showForgot, setShowForgot] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotSent, setForgotSent] = useState(false)
+  const [forgotLoading, setForgotLoading] = useState(false)
+
+Add handler:
+  const handleForgotPassword = async () => {
+    if (!forgotEmail) return
+    setForgotLoading(true)
+    await supabase.auth.resetPasswordForEmail(forgotEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    })
+    setForgotSent(true)
+    setForgotLoading(false)
+  }
+
+In the form, after the password input div, add a forgot password link:
+
+  <div className="text-right -mt-2">
+    <button
+      type="button"
+      onClick={() => setShowForgot(true)}
+      className="text-xs text-gray-400 hover:text-accent transition-colors"
+    >
+      Forgot password?
+    </button>
+  </div>
+
+After the Sign In button, add the forgot password modal/inline:
+
+  {showForgot && (
+    <div className="mt-4 p-4 bg-gray-50 rounded-lg border 
+      border-gray-200">
+      {forgotSent ? (
+        <p className="text-sm text-green-600 text-center">
+          Reset link sent — check your email.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-gray-600">
+            Enter your email and we'll send a reset link.
+          </p>
+          <input
+            type="email"
+            value={forgotEmail}
+            onChange={(e) => setForgotEmail(e.target.value)}
+            placeholder="you@company.com"
+            className="w-full border border-gray-300 rounded-lg 
+              px-4 py-2.5 text-sm focus:outline-none 
+              focus:ring-2 focus:ring-accent"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowForgot(false)}
+              className="flex-1 border border-gray-300 text-gray-600 
+                text-sm font-medium py-2 rounded-lg hover:bg-gray-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              disabled={forgotLoading || !forgotEmail}
+              className="flex-1 bg-navy text-white text-sm font-medium 
+                py-2 rounded-lg hover:bg-navy/90 disabled:bg-gray-300"
+            >
+              {forgotLoading ? 'Sending…' : 'Send Reset Link'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )}
+
+Create app/reset-password/page.tsx:
+
+'use client'
+
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter } from 'next/navigation'
+import Header from '@/components/Header'
+import { supabase } from '@/lib/supabase'
+
+function ResetContent() {
+  const router = useRouter()
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const [done, setDone] = useState(false)
+
+  const handleReset = async () => {
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.')
+      return
+    }
+    if (password !== confirm) {
+      setError('Passwords do not match.')
+      return
+    }
+    setLoading(true)
+    const { error } = await supabase.auth.updateUser({ password })
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+    } else {
+      setDone(true)
+      setTimeout(() => router.push('/dashboard'), 2000)
+    }
+  }
+
+  if (done) {
+    return (
+      <div className="min-h-screen flex flex-col bg-gray-50">
+        <Header />
+        <main className="flex-1 flex items-center justify-center px-4">
+          <div className="text-center">
+            <p className="text-green-600 font-semibold">
+              Password updated. Redirecting to dashboard…
+            </p>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col bg-gray-50">
+      <Header />
+      <main className="flex-1 flex items-center justify-center px-4 py-16">
+        <div className="max-w-sm w-full">
+          <div className="bg-white rounded-xl border border-gray-200 
+            shadow-sm p-8">
+            <h1 className="text-2xl font-bold text-navy mb-6 text-center">
+              Set New Password
+            </h1>
+            <div className="flex flex-col gap-4">
+              <div>
+                <label className="block text-sm font-medium 
+                  text-gray-700 mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg 
+                    px-4 py-2.5 text-sm focus:outline-none 
+                    focus:ring-2 focus:ring-accent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium 
+                  text-gray-700 mb-1">Confirm Password</label>
+                <input
+                  type="password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  className="w-full border border-gray-300 rounded-lg 
+                    px-4 py-2.5 text-sm focus:outline-none 
+                    focus:ring-2 focus:ring-accent"
+                />
+              </div>
+              {error && (
+                <p className="text-red-500 text-sm">{error}</p>
+              )}
+              <button
+                onClick={handleReset}
+                disabled={loading}
+                className="w-full bg-navy disabled:bg-gray-300 
+                  hover:bg-navy/90 text-white font-semibold py-3 
+                  rounded-lg text-sm transition-colors"
+              >
+                {loading ? 'Updating…' : 'Update Password'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+export default function ResetPasswordPage() {
+  return <Suspense><ResetContent /></Suspense>
+}
+
+===================================================================
+Fix F6 — Protect cron routes with CRON_SECRET
+===================================================================
+
+In app/api/cron/sequences/route.ts, add auth check at the top 
+of the GET handler:
+
+  export async function GET(req: NextRequest) {
+    const authHeader = req.headers.get('authorization')
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, 
+        { status: 401 })
+    }
+    // ... rest of existing code
+  }
+
+Note: change the function signature from GET() to GET(req: NextRequest)
+and add: import { NextRequest } from 'next/server' at the top.
+
+In app/api/cron/reset-leads/route.ts, same change:
+
+  export async function GET(req: NextRequest) {
+    const authHeader = req.headers.get('authorization')
+    if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      return NextResponse.json({ error: 'Unauthorized' }, 
+        { status: 401 })
+    }
+    // ... rest of existing code
+  }
+
+Add to .env.local:
+  CRON_SECRET=generate_a_long_random_string_here
+
+Update vercel.json to pass the secret header with cron invocations.
+Replace the existing vercel.json content with:
+
+{
+  "crons": [
+    {
+      "path": "/api/cron/sequences",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/reset-leads", 
+      "schedule": "0 0 1 * *"
+    }
+  ]
+}
+
+Note: Vercel automatically passes the CRON_SECRET as a Bearer token 
+when it invokes cron routes — add CRON_SECRET to your Vercel 
+environment variables and Vercel handles the rest. No manual header 
+configuration needed in vercel.json.
+
+Also add CRON_SECRET to Vercel environment variables dashboard.
+
+===================================================================
+Fix F7 — Build the four static trust pages
+===================================================================
+
+Create app/about/page.tsx:
+
+import Header from '@/components/Header'
+import Footer from '@/components/Footer'
+import Link from 'next/link'
+
+export const metadata = {
+  title: 'About | CommercialCleaningNearMe.com',
+}
+
+export default function AboutPage() {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1 bg-white">
+        <div className="max-w-3xl mx-auto px-4 py-16">
+          <h1 className="text-4xl font-bold text-navy mb-6">
+            About CommercialCleaningNearMe.com
+          </h1>
+          <div className="prose prose-gray max-w-none space-y-6 
+            text-gray-600 leading-relaxed">
+            <p className="text-lg">
+              CommercialCleaningNearMe.com is a directory connecting 
+              facility managers and property owners with verified 
+              commercial cleaning companies across the United States.
+            </p>
+            <p>
+              We built this because finding a reliable commercial 
+              cleaner is harder than it should be. Facility managers 
+              waste hours calling companies who don't serve their area, 
+              comparing quotes with no common standard, and relying on 
+              outdated listings. Cleaning companies waste money on ads 
+              that reach the wrong people.
+            </p>
+            <p>
+              Our directory gives facility managers a single, organized 
+              place to search by city and service type, read real Google 
+              reviews, and request quotes from multiple companies at once. 
+              It gives cleaning companies a reliable channel to reach 
+              facility managers who are actively looking — without the 
+              overhead of paid ads.
+            </p>
+            <h2 className="text-2xl font-bold text-navy mt-10 mb-4">
+              How It Works
+            </h2>
+            <p>
+              Facility managers search free. They can browse companies, 
+              read reviews, compare services, and submit quote requests 
+              at no cost. Their contact information is only shared with 
+              the specific companies they select — never distributed 
+              broadly or sold.
+            </p>
+            <p>
+              Cleaning companies claim their free listing and pay only 
+              when they want to access a lead's contact details. There 
+              is no monthly fee to be listed.
+            </p>
+            <h2 className="text-2xl font-bold text-navy mt-10 mb-4">
+              Contact
+            </h2>
+            <p>
+              Questions or feedback?{' '}
+              <Link href="/contact" className="text-accent hover:underline">
+                Reach out here
+              </Link>{' '}
+              or email us at{' '}
+              <a href="mailto:hello@commercialcleaningnearme.com" 
+                className="text-accent hover:underline">
+                hello@commercialcleaningnearme.com
+              </a>.
+            </p>
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </div>
+  )
+}
+
+---
+
+Create app/contact/page.tsx:
+
+'use client'
+
+import { useState } from 'react'
+import Header from '@/components/Header'
+import Footer from '@/components/Footer'
+
+export default function ContactPage() {
+  const [form, setForm] = useState({ 
+    name: '', email: '', message: '' 
+  })
+  const [sent, setSent] = useState(false)
+  const [sending, setSending] = useState(false)
+
+  const submit = async () => {
+    if (!form.name || !form.email || !form.message) return
+    setSending(true)
+    await fetch('/api/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(form),
+    })
+    setSent(true)
+    setSending(false)
+  }
+
+  const inputCls = `w-full border border-gray-300 rounded-lg px-4 
+    py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent`
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1 bg-white">
+        <div className="max-w-xl mx-auto px-4 py-16">
+          <h1 className="text-4xl font-bold text-navy mb-3">
+            Contact Us
+          </h1>
+          <p className="text-gray-500 mb-10">
+            Questions, feedback, or need help with your listing?
+          </p>
+          {sent ? (
+            <div className="bg-green-50 border border-green-200 
+              rounded-xl p-8 text-center">
+              <p className="text-green-700 font-semibold">
+                Message sent — we'll get back to you within 24 hours.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-5">
+              <div>
+                <label className="block text-sm font-medium 
+                  text-gray-700 mb-1">Name</label>
+                <input className={inputCls} value={form.name}
+                  onChange={e => setForm(f => ({...f, name: e.target.value}))}
+                  placeholder="Your name" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium 
+                  text-gray-700 mb-1">Email</label>
+                <input type="email" className={inputCls} 
+                  value={form.email}
+                  onChange={e => setForm(f => ({...f, email: e.target.value}))}
+                  placeholder="you@company.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium 
+                  text-gray-700 mb-1">Message</label>
+                <textarea className={inputCls} rows={5} 
+                  value={form.message}
+                  onChange={e => setForm(f => ({...f, message: e.target.value}))}
+                  placeholder="How can we help?" />
+              </div>
+              <button
+                onClick={submit}
+                disabled={sending || !form.name || !form.email || !form.message}
+                className="bg-navy text-white font-semibold py-3 
+                  rounded-lg text-sm hover:bg-navy/90 transition-colors 
+                  disabled:bg-gray-300"
+              >
+                {sending ? 'Sending…' : 'Send Message'}
+              </button>
+            </div>
+          )}
+        </div>
+      </main>
+      <Footer />
+    </div>
+  )
+}
+
+---
+
+Create app/api/contact/route.ts:
+
+import { NextRequest, NextResponse } from 'next/server'
+import { sendEmail } from '@/lib/resend'
+
+export async function POST(req: NextRequest) {
+  const { name, email, message } = await req.json()
+  if (!name || !email || !message) {
+    return NextResponse.json({ error: 'Missing fields' }, 
+      { status: 400 })
+  }
+  await sendEmail(
+    process.env.ADMIN_EMAIL!,
+    `Contact form — ${name}`,
+    `<p><strong>From:</strong> ${name} (${email})</p>
+     <p><strong>Message:</strong></p>
+     <p>${message}</p>`
+  )
+  return NextResponse.json({ success: true })
+}
+
+---
+
+Create app/privacy/page.tsx:
+
+import Header from '@/components/Header'
+import Footer from '@/components/Footer'
+
+export const metadata = {
+  title: 'Privacy Policy | CommercialCleaningNearMe.com',
+}
+
+export default function PrivacyPage() {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1 bg-white">
+        <div className="max-w-3xl mx-auto px-4 py-16">
+          <h1 className="text-4xl font-bold text-navy mb-3">
+            Privacy Policy
+          </h1>
+          <p className="text-gray-400 text-sm mb-10">
+            Last updated: {new Date().getFullYear()}
+          </p>
+          <div className="space-y-8 text-gray-600 leading-relaxed">
+            <section>
+              <h2 className="text-xl font-bold text-navy mb-3">
+                Information We Collect
+              </h2>
+              <p>When you submit a quote request, we collect your name, 
+              company name, email address, and phone number. This 
+              information is used solely to connect you with the 
+              cleaning companies you selected.</p>
+            </section>
+            <section>
+              <h2 className="text-xl font-bold text-navy mb-3">
+                How We Use Your Information
+              </h2>
+              <p>Your contact details are shared only with the specific 
+              cleaning companies you select when submitting a quote 
+              request. We do not sell your information to third parties. 
+              We do not add you to marketing lists. We do not share your 
+              information with companies you did not select.</p>
+            </section>
+            <section>
+              <h2 className="text-xl font-bold text-navy mb-3">
+                For Cleaning Companies
+              </h2>
+              <p>When you claim a listing, we collect your name, email, 
+              phone number, and business information. This is used to 
+              maintain your directory listing and deliver leads. You may 
+              opt out of email communications at any time using the 
+              unsubscribe link in any email we send.</p>
+            </section>
+            <section>
+              <h2 className="text-xl font-bold text-navy mb-3">
+                Cookies
+              </h2>
+              <p>We use cookies for authentication and session management 
+              only. We do not use tracking cookies or advertising cookies.
+              </p>
+            </section>
+            <section>
+              <h2 className="text-xl font-bold text-navy mb-3">
+                Contact
+              </h2>
+              <p>Questions about this policy? Email us at{' '}
+                <a href="mailto:hello@commercialcleaningnearme.com"
+                  className="text-accent hover:underline">
+                  hello@commercialcleaningnearme.com
+                </a>.
+              </p>
+            </section>
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </div>
+  )
+}
+
+---
+
+Create app/terms/page.tsx:
+
+import Header from '@/components/Header'
+import Footer from '@/components/Footer'
+
+export const metadata = {
+  title: 'Terms of Service | CommercialCleaningNearMe.com',
+}
+
+export default function TermsPage() {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1 bg-white">
+        <div className="max-w-3xl mx-auto px-4 py-16">
+          <h1 className="text-4xl font-bold text-navy mb-3">
+            Terms of Service
+          </h1>
+          <p className="text-gray-400 text-sm mb-10">
+            Last updated: {new Date().getFullYear()}
+          </p>
+          <div className="space-y-8 text-gray-600 leading-relaxed">
+            <section>
+              <h2 className="text-xl font-bold text-navy mb-3">
+                Use of the Directory
+              </h2>
+              <p>CommercialCleaningNearMe.com is a directory service. 
+              By using this site, you agree not to submit false 
+              information, misuse contact details obtained through 
+              the platform, or attempt to circumvent our systems.</p>
+            </section>
+            <section>
+              <h2 className="text-xl font-bold text-navy mb-3">
+                For Facility Managers
+              </h2>
+              <p>Submitting a quote request is free. By submitting, 
+              you consent to being contacted by the cleaning companies 
+              you selected. You are not obligated to engage with any 
+              company that contacts you.</p>
+            </section>
+            <section>
+              <h2 className="text-xl font-bold text-navy mb-3">
+                For Cleaning Companies
+              </h2>
+              <p>Lead contact details are provided for the purpose of 
+              responding to quote requests only. Resale of contact 
+              information obtained through this platform is prohibited. 
+              Subscription fees are billed monthly and may be cancelled 
+              at any time. Refunds are not provided for partial months.
+              </p>
+            </section>
+            <section>
+              <h2 className="text-xl font-bold text-navy mb-3">
+                Disclaimer
+              </h2>
+              <p>We do not guarantee the quality of any cleaning company 
+              listed in our directory. Reviews displayed are sourced from 
+              Google and reflect the opinions of third parties. We are not 
+              responsible for the outcome of any engagement between a 
+              facility manager and a cleaning company.</p>
+            </section>
+            <section>
+              <h2 className="text-xl font-bold text-navy mb-3">
+                Contact
+              </h2>
+              <p>Questions?{' '}
+                <a href="mailto:hello@commercialcleaningnearme.com"
+                  className="text-accent hover:underline">
+                  hello@commercialcleaningnearme.com
+                </a>
+              </p>
+            </section>
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </div>
+  )
+}
+
+===================================================================
+Fix F8 — Build custom 404 page
+===================================================================
+
+Create app/not-found.tsx:
+
+import Link from 'next/link'
+import Header from '@/components/Header'
+import Footer from '@/components/Footer'
+
+export default function NotFound() {
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1 bg-gray-50 flex items-center 
+        justify-center px-4">
+        <div className="text-center max-w-md">
+          <div className="text-8xl font-black text-gray-200 mb-4">
+            404
+          </div>
+          <h1 className="text-2xl font-bold text-navy mb-3">
+            Page not found
+          </h1>
+          <p className="text-gray-500 mb-8">
+            The page you're looking for doesn't exist or has moved.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 
+            justify-center">
+            <Link
+              href="/search"
+              className="bg-navy text-white font-semibold px-6 py-3 
+                rounded-lg hover:bg-navy/90 transition-colors text-sm"
+            >
+              Browse Directory
+            </Link>
+            <Link
+              href="/claim"
+              className="border border-gray-300 text-gray-700 
+                font-semibold px-6 py-3 rounded-lg hover:border-accent 
+                hover:text-accent transition-colors text-sm"
+            >
+              Claim Your Listing
+            </Link>
+          </div>
+        </div>
+      </main>
+      <Footer />
+    </div>
+  )
+}
+
+===================================================================
+Fix F9 — Fix search page empty state messaging
+===================================================================
+
+In app/search/page.tsx, find where fallbackToState is used.
+The code has a fallbackToState flag that triggers when city 
+returns 0 results, but there is no UI message shown.
+
+Find the results header section — it shows something like:
+  "Showing {total} companies..."
+
+Add this directly above the results count, conditionally:
+
+  {fallbackToState && city && (
+    <div className="bg-amber-50 border border-amber-200 rounded-lg 
+      px-4 py-2.5 text-sm text-amber-800 mb-4">
+      No companies found in <strong>{city}</strong> — showing all 
+      companies in {state || 'this state'} instead.
+    </div>
+  )}
+
+===================================================================
+Fix F10 — Add review solicitation to lead creation flow
+===================================================================
+
+In app/api/leads/create/route.ts, in the email sequence that 
+sends the confirmation email to the facility manager 
+(contact_email), that email currently says "companies will 
+contact you within 24 hours."
+
+After that send, add a new email to the Promise.allSettled array 
+that fires 14 days later via a cron sequence. We can't delay a 
+single email — instead, log it for the cron to pick up.
+
+Add a new record to email_sequences table after the lead is created:
+
+  await supabaseAdmin.from('email_sequences').insert({
+    company_id: null,  // facility manager, not a company
+    sequence_name: `facility_review_${lead.id}`,
+    sent_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+      .toISOString(), // store the FUTURE send date
+  }).catch(() => {})  // non-critical, don't fail the lead
+
+Wait — email_sequences has a company_id NOT NULL constraint and 
+a UNIQUE constraint on company_id + sequence_name. Instead, 
+add a new table for facility follow-ups.
+
+Run this migration in Supabase SQL Editor:
+
+  CREATE TABLE IF NOT EXISTS facility_followups (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    lead_id     uuid REFERENCES leads(id),
+    email       text NOT NULL,
+    name        text,
+    city        text,
+    send_after  timestamptz NOT NULL,
+    sent        boolean DEFAULT false,
+    created_at  timestamptz DEFAULT now()
+  );
+  
+  CREATE INDEX IF NOT EXISTS followup_send_idx 
+    ON facility_followups(send_after, sent);
+
+In app/api/leads/create/route.ts, after the lead insert succeeds, 
+add:
+
+  await supabaseAdmin.from('facility_followups').insert({
+    lead_id: lead.id,
+    email: contact_email,
+    name: contact_name,
+    city: city,
+    send_after: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+      .toISOString(),
+  }).catch(() => {})
+
+In app/api/cron/sequences/route.ts, at the end of the GET 
+handler before the return, add:
+
+  // Facility manager review requests (14 days after quote)
+  const { data: facilityFollowups } = await supabaseAdmin
+    .from('facility_followups')
+    .select('*')
+    .eq('sent', false)
+    .lte('send_after', now.toISOString())
+    .limit(50)
+
+  for (const followup of facilityFollowups || []) {
+    const firstName = followup.name?.split(' ')[0] || 'there'
+    await sendEmail(
+      followup.email,
+      'Did you find a cleaning company through us?',
+      `<div style="font-family:sans-serif;max-width:600px;padding:20px">
+        <p>Hi ${firstName},</p>
+        <p>You submitted a cleaning quote request through 
+        CommercialCleaningNearMe.com about two weeks ago for 
+        ${followup.city}.</p>
+        <p>Did you end up finding a company that worked out?</p>
+        <p>If so, a quick review on your experience would go a long 
+        way — it helps other facility managers find good cleaners 
+        faster.</p>
+        <p style="margin-top:16px">
+          <a href="${process.env.NEXT_PUBLIC_SITE_URL}" 
+            style="color:#2563EB">
+            → Leave a review
+          </a>
+        </p>
+        <p style="color:#999;font-size:12px;margin-top:24px">
+          CommercialCleaningNearMe.com
+        </p>
+      </div>`
+    )
+    await supabaseAdmin
+      .from('facility_followups')
+      .update({ sent: true })
+      .eq('id', followup.id)
+  }
+
+===================================================================
+VERIFICATION CHECKLIST
+===================================================================
+
+1. SelectionBar: select 2 companies on any search or pSEO page.
+   Verify the bar says "2 companies selected" with NO pricing text.
+
+2. Dashboard leads: log in as a company with no city-level leads.
+   Verify the blue notice appears: "No leads in [city] — showing 
+   [state] leads instead."
+
+3. Dashboard leads: verify each available lead row shows
+   "Name, company, email & phone" under the ●●●●●●●● mask.
+
+4. Header: verify "Get Free Quotes" accent button appears on 
+   desktop nav and in mobile menu.
+
+5. Login page: click "Forgot password?" — verify inline form 
+   appears. Enter an email and submit — verify "Reset link sent" 
+   message appears.
+
+6. Visit /reset-password — verify the page loads and renders 
+   the password update form.
+
+7. Visit /about — verify it loads with real content, no 404.
+8. Visit /contact — verify form loads and submits successfully.
+9. Visit /privacy — verify it loads.
+10. Visit /terms — verify it loads.
+11. Visit /nonexistent-page — verify custom 404 with nav links 
+    appears instead of Next.js default error.
+
+12. In Supabase, verify facility_followups table was created.
+    Submit a test quote, then check Supabase — a row should 
+    appear in facility_followups with send_after 14 days from now.
+
+13. CRON_SECRET: add it to .env.local and Vercel env vars.
+    Try hitting /api/cron/sequences directly in the browser —
+    you should get {"error":"Unauthorized"} not the sequence output.

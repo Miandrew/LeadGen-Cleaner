@@ -239,11 +239,6 @@ function SearchContent() {
                       </span>
                     )}
                   </p>
-                  {fallbackToState && city && (
-                    <p className="text-xs text-amber-600 mt-0.5">
-                      No exact matches for &ldquo;{city}&rdquo; — showing all companies in {state}
-                    </p>
-                  )}
                 </div>
                 <select
                   value={sort}
@@ -255,6 +250,12 @@ function SearchContent() {
                   <option value="newest">Newest</option>
                 </select>
               </div>
+
+              {fallbackToState && city && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-sm text-amber-800 mb-4">
+                  No companies found in <strong>{city}</strong> — showing all companies in {state || 'this state'} instead.
+                </div>
+              )}
 
               {loading ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
