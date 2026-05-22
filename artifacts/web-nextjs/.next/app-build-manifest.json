@@ -16,15 +16,15 @@
       "static/chunks/main-app.js",
       "static/chunks/app/not-found.js"
     ],
-    "/quote/page": [
+    "/service/[service]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/quote/page.js"
+      "static/chunks/app/service/[service]/page.js"
     ],
-    "/for-cleaning-companies/page": [
+    "/commercial-cleaning/[location]/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/for-cleaning-companies/page.js"
+      "static/chunks/app/commercial-cleaning/[location]/page.js"
     ]
   }
 }
