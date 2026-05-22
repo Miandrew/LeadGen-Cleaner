@@ -49,13 +49,17 @@ export default async function DashboardPage() {
   const cutoff72h = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()
   const cityName = (company.city as string) || ''
 
+  const availableLeadsQuery = cityName
+    ? supabaseAdmin
+        .from('leads')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'open')
+        .ilike('city', `%${cityName}%`)
+        .gte('created_at', cutoff72h)
+    : Promise.resolve({ count: 0 })
+
   const [{ count: availableLeads }, { count: purchasedLeads }, { data: recentPurchases }] = await Promise.all([
-    supabaseAdmin
-      .from('leads')
-      .select('*', { count: 'exact', head: true })
-      .eq('status', 'open')
-      .ilike('city', `%${cityName}%`)
-      .gte('created_at', cutoff72h),
+    availableLeadsQuery,
     supabaseAdmin
       .from('lead_purchases')
       .select('*', { count: 'exact', head: true })
@@ -70,9 +74,55 @@ export default async function DashboardPage() {
 
   const firstName = (company.name as string)?.split(' ')[0] || 'there'
 
+  const hasLeads = (availableLeads || 0) > 0
+  const hasPurchases = (purchasedLeads || 0) > 0
+  const hasSubscription = user.subscription_status === 'active'
+
+  const nextAction = hasSubscription
+    ? null
+    : !hasPurchases && score < 80
+    ? {
+        message: `Your profile is ${score}% complete. Complete profiles get 3x more views from facility managers.`,
+        cta: 'Complete Profile →',
+        href: '/dashboard/listing',
+        color: 'bg-blue-50 border-blue-200',
+        textColor: 'text-blue-900',
+      }
+    : !hasPurchases && hasLeads && cityName
+    ? {
+        message: `${availableLeads} lead${availableLeads === 1 ? '' : 's'} available in ${cityName} right now. Facility managers looking for cleaners in your area.`,
+        cta: 'View Leads →',
+        href: '/dashboard/leads',
+        color: 'bg-green-50 border-green-200',
+        textColor: 'text-green-900',
+      }
+    : hasPurchases && !hasSubscription
+    ? {
+        message: `You've bought leads individually. Subscribe to get them delivered automatically — no unlocking required.`,
+        cta: 'See Plans →',
+        href: '/dashboard/subscription',
+        color: 'bg-amber-50 border-amber-200',
+        textColor: 'text-amber-900',
+      }
+    : null
+
   return (
     <div className="max-w-4xl">
       <h1 className="text-2xl font-bold text-navy mb-6">Welcome back, {firstName}</h1>
+
+      {nextAction && (
+        <div className={`${nextAction.color} border rounded-xl p-5 mb-6 flex items-center justify-between gap-4 flex-wrap`}>
+          <p className={`text-sm font-medium flex-1 ${nextAction.textColor}`}>
+            {nextAction.message}
+          </p>
+          <Link
+            href={nextAction.href}
+            className="flex-shrink-0 bg-navy text-white text-sm font-semibold px-4 py-2.5 rounded-lg hover:bg-navy/90 transition-colors whitespace-nowrap"
+          >
+            {nextAction.cta}
+          </Link>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
         <div className="flex items-center justify-between mb-2">

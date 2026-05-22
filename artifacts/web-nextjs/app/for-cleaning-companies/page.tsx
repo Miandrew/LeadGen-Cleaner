@@ -12,9 +12,9 @@ const PLANS = [
     per: 'per lead',
     desc: 'No commitment. Pay only when you want to contact a facility manager.',
     features: [
-      'Unlock full contact details per lead',
-      'See service type, building size, frequency',
-      'No monthly fee',
+      'Full contact details: name, company, email, phone',
+      'See building type, size, and cleaning frequency',
+      'No monthly fee — pay only when you want',
     ],
     cta: 'Claim Free Listing',
     href: '/claim',
@@ -24,14 +24,12 @@ const PLANS = [
     name: 'Essentials',
     price: '$149',
     per: '/month',
-    desc: 'Leads delivered automatically plus the full automation suite running in the background.',
+    desc: 'Leads delivered automatically plus the full automation suite.',
     features: [
-      'Free leads included — shared, up to 3 companies',
+      'Free leads included — delivered automatically',
       'Automated SMS follow-up within 2 minutes of every lead',
-      'Missed call text back — no lead falls through',
+      'Missed call text-back — no lead falls through',
       'Automated review request sequences',
-      'Appointment booking sent automatically when prospects respond',
-      'Monthly performance report',
       'Boosted directory ranking',
       'Cancel anytime',
     ],
@@ -43,16 +41,13 @@ const PLANS = [
     name: 'Growth',
     price: '$349',
     per: '/month',
-    desc: 'Everything in Essentials plus semi-exclusive leads and active management of your Google presence.',
+    desc: 'Everything in Essentials plus active management of your Google presence.',
     features: [
-      'Free leads included — semi-exclusive, max 2 companies',
       'Everything in Essentials',
+      'Semi-exclusive leads — max 2 companies per lead',
       'Google Business Profile management — 4 posts/month',
       'Review response management within 48 hours',
-      'Full pipeline dashboard — track every lead',
-      '90-day nurture sequences for cold prospects',
-      'Reactivation campaigns to past clients twice yearly',
-      'Two-way SMS from your business number',
+      'Pipeline dashboard — track every lead',
       'Optional monthly strategy call',
       'Cancel anytime',
     ],
@@ -60,6 +55,12 @@ const PLANS = [
     href: '/claim',
     highlight: true,
   },
+]
+
+const MATH_ITEMS = [
+  { number: '$35',     label: 'Cost to unlock one lead',     sub: 'Pay only when you want contact details' },
+  { number: '$1,500+', label: 'Average annual contract value', sub: 'Most commercial contracts are recurring monthly' },
+  { number: '43x',     label: 'Return on a single conversion', sub: 'One closed deal from one lead pays for 43 more' },
 ]
 
 const HOW_IT_WORKS = [
@@ -171,12 +172,36 @@ export default async function ForCleaningCompaniesPage() {
         </div>
       </section>
 
+      {/* The Math */}
+      <section className="py-20 px-4 bg-gray-50">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-3xl font-bold text-navy text-center mb-4">The Math Is Simple</h2>
+          <p className="text-gray-500 text-center mb-12 max-w-xl mx-auto">
+            One commercial cleaning contract is worth $1,000–$3,000 per year to your business. The cost to find it is $35.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {MATH_ITEMS.map((item) => (
+              <div key={item.label} className="bg-white rounded-2xl border border-gray-200 p-8 text-center shadow-sm">
+                <div className="text-5xl font-black text-navy mb-3">{item.number}</div>
+                <div className="font-semibold text-gray-900 mb-1">{item.label}</div>
+                <div className="text-sm text-gray-500">{item.sub}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* Pricing */}
       <section id="pricing" className="py-20 px-4 bg-white">
         <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-12">
+          <div className="text-center mb-8">
             <h2 className="text-3xl font-bold text-navy mb-3">Simple, Transparent Pricing</h2>
             <p className="text-gray-500">Start for free. Pay only when you find leads worth pursuing.</p>
+          </div>
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-8 text-center max-w-3xl mx-auto">
+            <p className="text-sm text-amber-900">
+              At $35/lead, the Essentials plan pays for itself after just 5 leads — and includes the full automation suite running in the background.
+            </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {PLANS.map((plan) => (

@@ -1,0 +1,535 @@
+UX FIXES — CORRECTED VERSION
+Work in exact order. These are surgical changes only.
+
+===================================================================
+Fix U1 — Homepage: reorder sections, fix links, fix trust bar
+         DO NOT combine browse sections into tabs
+===================================================================
+
+In app/page.tsx, make these changes:
+
+CHANGE 1 — Move "How It Works" section to the bottom.
+The current order is:
+  Hero → How It Works → Browse by Service → Browse by State → CTA
+
+Change to:
+  Hero → Browse by Service → Browse by State → CTA → How It Works
+
+Cut the entire How It Works section JSX from its current position
+and paste it after the cleaning company CTA section.
+
+CHANGE 2 — Fix service grid links.
+Find all instances of:
+  href={`/search?service=${encodeURIComponent(service.value)}`}
+Replace with:
+  href={`/service/${service.value}`}
+
+CHANGE 3 — Fix the hardcoded trust bar numbers.
+Add to the getStats() function (alongside existing queries):
+
+  const [stateListRes, countRes] = await Promise.all([
+    supabaseAdmin
+      .from('companies')
+      .select('state')
+      .eq('active', true)
+      .not('state', 'is', null),
+    supabaseAdmin
+      .from('companies')
+      .select('*', { count: 'exact', head: true })
+      .eq('active', true),
+  ])
+
+  const uniqueStateCount = new Set(
+    (stateListRes.data || []).map((c: { state: string }) => c.state)
+  ).size
+
+  const totalCompanies = countRes.count || 0
+
+Return totalCompanies and uniqueStateCount from getStats().
+
+Replace the hardcoded trust bar array:
+  ['5,600+ Companies Listed', '36 States Covered', 
+   'Real Google Reviews', 'Free to Search']
+With:
+  [
+    `${totalCompanies.toLocaleString()}+ Companies Listed`,
+    `${uniqueStateCount || 50} States Covered`,
+    'Real Google Reviews',
+    'Free to Search',
+  ]
+
+CHANGE 4 — Tighten section spacing.
+On the Browse by Service and Browse by State sections, 
+change py-16 to py-10 on both sections.
+This reduces scroll depth without hiding content.
+
+===================================================================
+Fix U2 — Quote form: fix field ORDER in Step 1, add smart defaults,
+          fix Step 3 copy
+===================================================================
+
+In app/quote/page.tsx:
+
+CHANGE 1 — Reorder Step 1 fields. City and state stay in Step 1 
+but move to be the FIRST fields (before service type).
+
+The correct field order for Step 1 is:
+  1. City (text input)
+  2. State (select)
+  3. Service Type (select)
+  4. Building Type (select)
+  5. Building Size (select)
+  6. Frequency (select)
+
+This is the natural mental order: "Where is your building? 
+What do you need? What kind of building is it?"
+
+Do NOT move city/state to Step 2. Keep all 6 fields in Step 1
+but in this new order.
+
+CHANGE 2 — Pre-populate from URL params.
+Inside QuoteContent(), add at the top:
+
+  const preCity = searchParams.get('city') || ''
+  const preState = searchParams.get('state') || ''
+  const preService = searchParams.get('service') || ''
+
+Update the form useState:
+
+  const [form, setForm] = useState({
+    city: preCity,
+    state: preState,
+    service_type: preService,
+    building_type: 'Office Building',
+    building_size: '1,000–5,000 sq ft',
+    frequency: '',
+    contact_name: '',
+    business_name: '',
+    contact_email: '',
+    contact_phone: '',
+    message: '',
+  })
+
+CHANGE 3 — Fix Step 3 trust message.
+On Step 3, find the heading and trust area. Replace whatever
+heading text exists with:
+
+  <div className="text-center mb-6">
+    <h2 className="text-xl font-bold text-navy mb-2">
+      Almost done
+    </h2>
+    <p className="text-gray-600 text-sm max-w-sm mx-auto">
+      Only the {companies.length}{' '}
+      {companies.length === 1 ? 'company' : 'companies'} below 
+      will receive your contact details. No other companies. 
+      No spam.
+    </p>
+  </div>
+
+CHANGE 4 — Fix submit button text.
+Find the submit button. Change its text from:
+  'Send Quote Request — Free'  (or whatever variant exists)
+To:
+  'Send My Quote Request'
+
+Also make sure serviceLabel() is imported from @/lib/utils and
+used in the Step 3 review summary so it shows "Office Cleaning"
+not "office".
+
+===================================================================
+Fix U3 — Quote form: pass city/state context to SelectionBar
+===================================================================
+
+In app/search/page.tsx, find the SelectionBar usage:
+
+  <SelectionBar
+    selectedCount={selectedIds.length}
+    onRequestQuotes={() =>
+      router.push(`/quote?companies=${selectedIds.join(',')}`)
+    }
+  />
+
+Update to pass city and state:
+
+  <SelectionBar
+    selectedCount={selectedIds.length}
+    onRequestQuotes={() => {
+      const params = new URLSearchParams()
+      params.set('companies', selectedIds.join(','))
+      if (city) params.set('city', city)
+      if (state) params.set('state', state)
+      if (service) params.set('service', service)
+      router.push(`/quote?${params.toString()}`)
+    }}
+  />
+
+In components/PseoCompanyGrid.tsx, update the SelectionBar 
+onRequestQuotes to also accept and pass city/state props.
+
+Update the Props interface:
+
+  interface Props {
+    companies: Company[]
+    city?: string
+    state?: string
+    service?: string
+  }
+
+Update the component signature:
+  export default function PseoCompanyGrid({ 
+    companies, city, state, service 
+  }: Props)
+
+Update SelectionBar usage inside PseoCompanyGrid:
+
+  <SelectionBar
+    selectedCount={selectedIds.length}
+    onRequestQuotes={() => {
+      const params = new URLSearchParams()
+      params.set('companies', selectedIds.join(','))
+      if (city) params.set('city', city)
+      if (state) params.set('state', state)
+      if (service) params.set('service', service)
+      router.push(`/quote?${params.toString()}`)
+    }}
+  />
+
+In app/commercial-cleaning/[location]/page.tsx, pass the 
+city and state to PseoCompanyGrid:
+
+  <PseoCompanyGrid
+    companies={companies}
+    city={isState ? undefined : city}
+    state={stateCode}
+  />
+
+Do the same in app/service/[service]/[location]/page.tsx:
+
+  <PseoCompanyGrid
+    companies={companies}
+    city={city}
+    state={stateCode}
+    service={params.service}
+  />
+
+===================================================================
+Fix U4 — Claim form: save role, password match, rename Step 3,
+          add selection count
+===================================================================
+
+CHANGE 1 — In app/api/claim/route.ts:
+Find: role: 'company'
+Replace with: role: body.role || 'company'
+
+CHANGE 2 — In app/claim/[slug]/page.tsx, after the 
+confirm_password input field closing div, add:
+
+  {form.confirm_password.length > 0 && form.password.length > 0 && (
+    <p className={`text-xs mt-1 ${
+      form.confirm_password === form.password
+        ? 'text-green-600'
+        : 'text-red-500'
+    }`}>
+      {form.confirm_password === form.password
+        ? '✓ Passwords match'
+        : 'Passwords do not match'}
+    </p>
+  )}
+
+CHANGE 3 — In app/claim/[slug]/page.tsx, find the Step 3 h2:
+Change heading to: "4 Quick Questions"
+Change subtext to: "Help us match the right leads to your 
+business — takes about 60 seconds."
+
+CHANGE 4 — Add selected count badge to the multi-select question.
+Find the how_getting_clients question h3. Replace:
+
+  <h3 className="font-semibold text-gray-900 mb-3">
+    How are you currently getting new clients?{' '}
+    <span className="text-gray-400 font-normal">(select all that apply)</span>
+  </h3>
+
+With:
+
+  <h3 className="font-semibold text-gray-900 mb-3">
+    How are you currently getting new clients?{' '}
+    <span className="text-gray-400 font-normal text-sm">
+      (select all that apply)
+    </span>
+    {form.how_getting_clients.length > 0 && (
+      <span className="ml-2 text-xs bg-navy text-white 
+        rounded-full px-2 py-0.5 font-normal">
+        {form.how_getting_clients.length} selected
+      </span>
+    )}
+  </h3>
+
+===================================================================
+Fix U5 — Fix for-cleaning-companies page: pricing and testimonials
+===================================================================
+
+This is the page cleaning companies land on from your outreach.
+It currently has wrong pricing and fake testimonials.
+
+In app/for-cleaning-companies/page.tsx:
+
+CHANGE 1 — Replace the PLANS array entirely:
+
+const PLANS = [
+  {
+    name: 'Pay Per Lead',
+    price: '$35',
+    per: 'per lead',
+    desc: 'No commitment. Pay only when you want to contact a facility manager.',
+    features: [
+      'Full contact details: name, company, email, phone',
+      'See building type, size, and cleaning frequency',
+      'No monthly fee — pay only when you want',
+    ],
+    cta: 'Claim Free Listing',
+    href: '/claim',
+    highlight: false,
+  },
+  {
+    name: 'Essentials',
+    price: '$149',
+    per: '/month',
+    desc: 'Leads delivered automatically plus the full automation suite.',
+    features: [
+      'Free leads included — delivered automatically',
+      'Automated SMS follow-up within 2 minutes of every lead',
+      'Missed call text-back — no lead falls through',
+      'Automated review request sequences',
+      'Boosted directory ranking',
+      'Cancel anytime',
+    ],
+    cta: 'Start Essentials',
+    href: '/claim',
+    highlight: false,
+  },
+  {
+    name: 'Growth',
+    price: '$349',
+    per: '/month',
+    desc: 'Everything in Essentials plus active management of your Google presence.',
+    features: [
+      'Everything in Essentials',
+      'Semi-exclusive leads — max 2 companies per lead',
+      'Google Business Profile management — 4 posts/month',
+      'Review response management within 48 hours',
+      'Pipeline dashboard — track every lead',
+      'Optional monthly strategy call',
+      'Cancel anytime',
+    ],
+    cta: 'Start Growth',
+    href: '/claim',
+    highlight: true,
+  },
+]
+
+CHANGE 2 — Remove the fake TESTIMONIALS section entirely.
+Delete the TESTIMONIALS array and the entire testimonials 
+section JSX. Replace with this math section:
+
+<section className="py-20 px-4 bg-gray-50">
+  <div className="max-w-4xl mx-auto">
+    <h2 className="text-3xl font-bold text-navy text-center mb-4">
+      The Math Is Simple
+    </h2>
+    <p className="text-gray-500 text-center mb-12 max-w-xl mx-auto">
+      One commercial cleaning contract is worth $1,000–$3,000 per year 
+      to your business. The cost to find it is $35.
+    </p>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {[
+        {
+          number: '$35',
+          label: 'Cost to unlock one lead',
+          sub: 'Pay only when you want contact details'
+        },
+        {
+          number: '$1,500+',
+          label: 'Average annual contract value',
+          sub: 'Most commercial contracts are recurring monthly'
+        },
+        {
+          number: '43x',
+          label: 'Return on a single conversion',
+          sub: 'One closed deal from one lead pays for 43 more'
+        }
+      ].map((item) => (
+        <div key={item.label}
+          className="bg-white rounded-2xl border border-gray-200 
+            p-8 text-center shadow-sm">
+          <div className="text-5xl font-black text-navy mb-3">
+            {item.number}
+          </div>
+          <div className="font-semibold text-gray-900 mb-1">
+            {item.label}
+          </div>
+          <div className="text-sm text-gray-500">{item.sub}</div>
+        </div>
+      ))}
+    </div>
+  </div>
+</section>
+
+CHANGE 3 — Add math comparison above the pricing plans.
+Before the plans grid, add:
+
+<div className="bg-amber-50 border border-amber-200 rounded-xl 
+  p-4 mb-8 text-center">
+  <p className="text-sm text-amber-900">
+    At $35/lead, the Essentials plan pays for itself after just 
+    5 leads — and includes the full automation suite running 
+    in the background.
+  </p>
+</div>
+
+===================================================================
+Fix U6 — Dashboard: contextual next-action card + 
+          fix available leads count to be city-specific
+===================================================================
+
+In app/dashboard/page.tsx:
+
+CHANGE 1 — Fix the available leads query. Currently it counts
+ALL open leads regardless of city. Replace:
+
+  supabaseAdmin
+    .from('leads')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'open')
+    .gte('created_at', sevenDaysAgo),
+
+With:
+
+  supabaseAdmin
+    .from('leads')
+    .select('*', { count: 'exact', head: true })
+    .eq('status', 'open')
+    .ilike('city', `%${company.city as string || ''}%`)
+    .gte('created_at', sevenDaysAgo),
+
+CHANGE 2 — Add the contextual next-action card.
+After computing score, missing, availableLeads, purchasedLeads,
+add:
+
+  const hasLeads = (availableLeads || 0) > 0
+  const hasPurchases = (purchasedLeads || 0) > 0
+  const hasSubscription = user.subscription_status === 'active'
+
+  const nextAction = hasSubscription
+    ? null
+    : !hasPurchases && score < 80
+    ? {
+        message: `Your profile is ${score}% complete. Complete profiles get 3x more views from facility managers.`,
+        cta: 'Complete Profile →',
+        href: '/dashboard/listing',
+        color: 'bg-blue-50 border-blue-200',
+        textColor: 'text-blue-900',
+      }
+    : !hasPurchases && hasLeads
+    ? {
+        message: `${availableLeads} lead${availableLeads === 1 ? '' : 's'} available in ${company.city as string} right now. Facility managers looking for cleaners in your area.`,
+        cta: 'View Leads →',
+        href: '/dashboard/leads',
+        color: 'bg-green-50 border-green-200',
+        textColor: 'text-green-900',
+      }
+    : hasPurchases && !hasSubscription
+    ? {
+        message: `You've bought leads individually. Subscribe to get them delivered automatically — no unlocking required.`,
+        cta: 'See Plans →',
+        href: '/dashboard/subscription',
+        color: 'bg-amber-50 border-amber-200',
+        textColor: 'text-amber-900',
+      }
+    : null
+
+In the JSX, add this as the very first element inside the 
+main content area, before the profile completion card:
+
+  {nextAction && (
+    <div className={`${nextAction.color} border rounded-xl p-5 
+      mb-6 flex items-center justify-between gap-4 flex-wrap`}>
+      <p className={`text-sm font-medium flex-1 ${nextAction.textColor}`}>
+        {nextAction.message}
+      </p>
+      <Link
+        href={nextAction.href}
+        className="flex-shrink-0 bg-navy text-white text-sm 
+          font-semibold px-4 py-2.5 rounded-lg hover:bg-navy/90 
+          transition-colors whitespace-nowrap"
+      >
+        {nextAction.cta}
+      </Link>
+    </div>
+  )}
+
+===================================================================
+Fix U7 — Dashboard listing: add "View your live listing" link
+===================================================================
+
+In app/dashboard/listing/page.tsx, find the Save button.
+Add immediately after it:
+
+  {company?.slug && (
+    
+      href={`/company/${company.slug}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-sm text-accent hover:underline 
+        text-center block mt-3"
+    >
+      View your live listing →
+    </a>
+  )}
+
+===================================================================
+VERIFICATION CHECKLIST — in order
+===================================================================
+
+1. Homepage: How It Works is at the BOTTOM, not second.
+   Browse by Service and Browse by State are still TWO separate 
+   sections (not tabbed). Trust bar shows real database numbers.
+   Click a service card — goes to /service/office not 
+   /search?service=office.
+
+2. Quote form: Step 1 field order is: City → State → Service → 
+   Building Type → Building Size → Frequency.
+   Coming from /commercial-cleaning/austin-tx, City pre-fills 
+   "Austin" and State pre-fills "TX".
+   Building Type pre-selects "Office Building."
+   Building Size pre-selects "1,000–5,000 sq ft."
+
+3. Quote form Step 3: heading says "Almost done." Trust message 
+   is prominent. Submit button says "Send My Quote Request."
+   Service shows "Office Cleaning" not "office."
+
+4. After selecting companies on a pSEO page and clicking 
+   Request Quotes, the /quote URL contains 
+   ?city=Austin&state=TX&companies=... not just ?companies=...
+
+5. Claim Step 2: type matching passwords → green checkmark.
+   Type non-matching → red indicator.
+
+6. Claim Step 3: heading says "4 Quick Questions."
+   Select 2 "how getting clients" options → "(2 selected)" 
+   badge appears next to the question.
+
+7. /for-cleaning-companies: pricing shows Essentials $149 and 
+   Growth $349. No fake testimonials. Math section shows $35, 
+   $1,500+, 43x. "Pays for itself after 5 leads" banner 
+   appears above pricing cards.
+
+8. Dashboard: contextual card appears at top. Test three states:
+   a) New company, profile < 80% → shows "Complete Profile" card
+   b) Company with available city leads → shows "X leads available 
+      in [City]" card in green
+   c) Company with purchases, no subscription → shows amber 
+      "Subscribe to automate" card
+   d) Subscriber → no card shown
+
+9. Dashboard listing: "View your live listing →" link appears 
+   below Save button.

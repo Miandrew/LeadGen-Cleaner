@@ -36,7 +36,7 @@ export default function PseoCompanyGrid({ companies, city, state, service }: Pro
     setSelectedIds((prev) => {
       if (prev.includes(id)) return prev.filter((x) => x !== id)
       if (prev.length >= 3) {
-        setToast('Maximum 3 companies — deselect one to add another.')
+        setToast('3 companies selected — scroll down to send your request.')
         setTimeout(() => setToast(''), 3000)
         return prev
       }

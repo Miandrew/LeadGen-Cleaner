@@ -21,9 +21,9 @@ function QuoteContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const companyIds = (searchParams.get('companies') || '').split(',').filter(Boolean)
-  const prefillCity = searchParams.get('city') || ''
-  const prefillState = searchParams.get('state') || ''
-  const prefillService = searchParams.get('service') || ''
+  const preCity = searchParams.get('city') || ''
+  const preState = searchParams.get('state') || ''
+  const preService = searchParams.get('service') || ''
 
   const [step, setStep] = useState(1)
   const [companies, setCompanies] = useState<Company[]>([])
@@ -31,12 +31,12 @@ function QuoteContent() {
   const [error, setError] = useState('')
 
   const [form, setForm] = useState({
-    service_type: prefillService,
+    city: preCity,
+    state: preState,
+    service_type: preService,
     building_type: 'Office Building',
     building_size: '1,000–5,000 sq ft',
     frequency: '',
-    city: prefillCity,
-    state: prefillState,
     contact_name: '',
     business_name: '',
     contact_email: '',
@@ -57,11 +57,16 @@ function QuoteContent() {
   const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }))
 
   const validateStep1 = () =>
-    !!form.service_type && !!form.building_type && !!form.building_size && !!form.frequency
+    !!form.city &&
+    !!form.state &&
+    !!form.service_type &&
+    !!form.building_type &&
+    !!form.building_size &&
+    !!form.frequency
 
   const validateStep2 = () => {
-    if (!form.contact_name || !form.business_name || !form.contact_email || !form.contact_phone ||
-        !form.city || !form.state) return false
+    if (!form.contact_name || !form.business_name || !form.contact_email || !form.contact_phone)
+      return false
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contact_email)) return false
     if (form.contact_phone.replace(/\D/g, '').length < 10) return false
     return true
@@ -119,6 +124,17 @@ function QuoteContent() {
               <div>
                 <h2 className="text-xl font-bold text-navy mb-6">Service Details</h2>
                 <div className="flex flex-col gap-4">
+                  <div>
+                    <label className={labelCls}>City</label>
+                    <input className={inputCls} value={form.city} onChange={(e) => set('city', e.target.value)} placeholder="Your city" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>State</label>
+                    <select className={inputCls} value={form.state} onChange={(e) => set('state', e.target.value)}>
+                      <option value="">Select state</option>
+                      {US_STATES.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+                    </select>
+                  </div>
                   <div>
                     <label className={labelCls}>Service Needed</label>
                     <select className={inputCls} value={form.service_type} onChange={(e) => set('service_type', e.target.value)}>
@@ -185,17 +201,6 @@ function QuoteContent() {
                     <input type="tel" className={inputCls} value={form.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} placeholder="(555) 000-0000" />
                   </div>
                   <div>
-                    <label className={labelCls}>City <span className="text-red-500">*</span></label>
-                    <input className={inputCls} value={form.city} onChange={(e) => set('city', e.target.value)} placeholder="Your city" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>State <span className="text-red-500">*</span></label>
-                    <select className={inputCls} value={form.state} onChange={(e) => set('state', e.target.value)}>
-                      <option value="">Select state</option>
-                      {US_STATES.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
                     <label className={labelCls}>Additional Notes <span className="text-gray-400">(optional)</span></label>
                     <textarea className={inputCls} rows={3} value={form.message} onChange={(e) => set('message', e.target.value)} placeholder="Any special requirements…" />
                   </div>
@@ -213,7 +218,7 @@ function QuoteContent() {
                   <h2 className="text-xl font-bold text-navy mb-2">Almost done</h2>
                   <p className="text-gray-600 text-sm max-w-sm mx-auto">
                     Only the {companies.length}{' '}
-                    {companies.length === 1 ? 'company' : 'companies'} below will receive your contact details. No spam, no other contacts.
+                    {companies.length === 1 ? 'company' : 'companies'} below will receive your contact details. No other companies. No spam.
                   </p>
                 </div>
                 <div className="bg-gray-50 rounded-lg p-4 mb-4 text-sm space-y-1">
