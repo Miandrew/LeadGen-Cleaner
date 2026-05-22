@@ -215,6 +215,11 @@ export default function ClaimPage() {
                   <div>
                     <label className={labelCls}>Confirm Password</label>
                     <input type="password" className={inputCls} value={form.confirm_password} onChange={(e) => set('confirm_password', e.target.value)} />
+                    {form.confirm_password.length > 0 && form.password.length > 0 && (
+                      <p className={`text-xs mt-1 ${form.confirm_password === form.password ? 'text-green-600' : 'text-red-500'}`}>
+                        {form.confirm_password === form.password ? '✓ Passwords match' : 'Passwords do not match'}
+                      </p>
+                    )}
                   </div>
                   {error && <p className="text-red-500 text-sm">{error}</p>}
                   <div className="flex gap-3 mt-2">
@@ -237,11 +242,19 @@ export default function ClaimPage() {
 
             {step === 3 && (
               <div>
-                <h2 className="text-xl font-bold text-navy mb-2">Quick Questions</h2>
-                <p className="text-gray-500 text-sm mb-6">Help us understand your business better.</p>
+                <h2 className="text-xl font-bold text-navy mb-2">4 Quick Questions</h2>
+                <p className="text-gray-500 text-sm mb-6">Help us match the right leads to your business — takes about 60 seconds.</p>
                 <div className="space-y-6">
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-3">How are you currently getting new clients? <span className="text-gray-400 font-normal">(select all that apply)</span></h3>
+                    <h3 className="font-semibold text-gray-900 mb-3">
+                      How are you currently getting new clients?{' '}
+                      <span className="text-gray-400 font-normal text-sm">(select all that apply)</span>
+                      {form.how_getting_clients.length > 0 && (
+                        <span className="ml-2 text-xs bg-navy text-white rounded-full px-2 py-0.5 font-normal">
+                          {form.how_getting_clients.length} selected
+                        </span>
+                      )}
+                    </h3>
                     <div className="grid grid-cols-1 gap-2">
                       {['Word of mouth and referrals', 'Google Ads', 'Social media marketing', 'Other directories or platforms', 'We struggle to find new clients consistently'].map((opt) => (
                         <OptionCard

@@ -5,8 +5,9 @@ import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import CompanyLogo from '@/components/CompanyLogo'
 import StarRating from '@/components/StarRating'
+import ReviewsList from '@/components/ReviewsList'
 import { supabaseAdmin, isSupabaseConfigured } from '@/lib/supabase'
-import { formatDate, formatPhone, FULL_STATE_NAMES, serviceLabel } from '@/lib/utils'
+import { formatPhone, FULL_STATE_NAMES, serviceLabel } from '@/lib/utils'
 
 interface Props {
   params: { slug: string }
@@ -202,11 +203,11 @@ export default async function CompanyPage({ params }: Props) {
             </div>
           </div>
 
-          {company.address && (
+          {(company.address || (company.city && company.state)) && (
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
               <h2 className="text-lg font-bold text-navy mb-4">Location</h2>
               <iframe
-                src={`https://maps.google.com/maps?q=${encodeURIComponent(company.address + ', ' + company.city + ', ' + company.state)}&output=embed`}
+                src={`https://maps.google.com/maps?q=${encodeURIComponent([company.address, company.city, company.state].filter(Boolean).join(', '))}&output=embed`}
                 width="100%"
                 height="300"
                 style={{ border: 0 }}
@@ -221,22 +222,7 @@ export default async function CompanyPage({ params }: Props) {
             <h2 className="text-lg font-bold text-navy mb-4">
               Reviews {company.review_count > 0 && `(${company.review_count})`}
             </h2>
-            {reviews.length === 0 ? (
-              <p className="text-gray-500 text-sm">No reviews yet for this company.</p>
-            ) : (
-              <div className="space-y-4">
-                {reviews.map((r: { id: string; author: string; rating: number; review_date: string; review_text: string }) => (
-                  <div key={r.id} className="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="font-semibold text-sm">{r.author}</span>
-                      <span className="text-xs text-gray-400">{formatDate(r.review_date)}</span>
-                    </div>
-                    <StarRating rating={r.rating} size="sm" />
-                    <p className="text-sm text-gray-600 mt-2">{r.review_text}</p>
-                  </div>
-                ))}
-              </div>
-            )}
+            <ReviewsList reviews={reviews} />
           </div>
         </div>
       </main>

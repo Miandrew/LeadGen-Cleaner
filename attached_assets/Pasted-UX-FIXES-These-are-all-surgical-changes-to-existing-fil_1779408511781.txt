@@ -1,0 +1,641 @@
+UX FIXES — These are all surgical changes to existing files.
+Work in exact order. Test each before moving on.
+
+===================================================================
+Fix U1 — Homepage: reorder sections, combine browse tabs, 
+          fix links and trust bar numbers
+===================================================================
+
+Step 1 — Create components/BrowseSection.tsx as a NEW client component:
+
+'use client'
+
+import { useState } from 'react'
+import Link from 'next/link'
+import { SERVICE_TYPES, FULL_STATE_NAMES } from '@/lib/utils'
+
+const SERVICE_ICONS: Record<string, string> = {
+  office: '🏢',
+  janitorial: '🧹',
+  medical: '🏥',
+  industrial: '🏭',
+  carpet: '🪣',
+  window: '🪟',
+  floor: '✨',
+  'post-construction': '🔨',
+  'pressure-washing': '💧',
+}
+
+interface Props {
+  serviceMap: Record<string, number>
+  topStates: [string, number][]
+}
+
+export default function BrowseSection({ serviceMap, topStates }: Props) {
+  const [tab, setTab] = useState<'service' | 'state'>('service')
+
+  return (
+    <section className="py-16 bg-gray-50">
+      <div className="max-w-5xl mx-auto px-4">
+        <div className="flex gap-6 border-b border-gray-200 mb-8">
+          {(['service', 'state'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`pb-3 text-sm font-semibold border-b-2 
+                transition-colors ${
+                tab === t
+                  ? 'border-navy text-navy'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {t === 'service' ? 'Browse by Service' : 'Browse by State'}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'service' && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {SERVICE_TYPES.map((service) => (
+              <Link
+                key={service.value}
+                href={`/service/${service.value}`}
+                className="bg-white border border-gray-200 rounded-xl 
+                  p-5 hover:border-accent hover:shadow-md transition-all 
+                  flex flex-col items-center text-center group"
+              >
+                <span className="text-3xl mb-2">
+                  {SERVICE_ICONS[service.value] || '🧽'}
+                </span>
+                <span className="font-semibold text-gray-900 text-sm 
+                  group-hover:text-navy">
+                  {service.label}
+                </span>
+                <span className="text-xs text-gray-400 mt-1">
+                  {(serviceMap[service.value] || 0).toLocaleString()} companies
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+
+        {tab === 'state' && (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+            {topStates.map(([code, count]) => {
+              const name = FULL_STATE_NAMES[code] || code
+              return (
+                <Link
+                  key={code}
+                  href={`/commercial-cleaning/${name.toLowerCase().replace(/\s+/g, '-')}`}
+                  className="bg-white border border-gray-200 rounded-xl 
+                    p-4 hover:border-accent hover:shadow-md transition-all 
+                    text-center group"
+                >
+                  <div className="font-bold text-navy text-base 
+                    group-hover:text-accent">{name}</div>
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {count.toLocaleString()} companies
+                  </div>
+                </Link>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+---
+
+Step 2 — Rewrite app/page.tsx completely. Replace the entire file:
+
+import Link from 'next/link'
+import { supabaseAdmin } from '@/lib/supabase'
+import Header from '@/components/Header'
+import Footer from '@/components/Footer'
+import SearchForm from '@/components/SearchForm'
+import BrowseSection from '@/components/BrowseSection'
+import { SERVICE_TYPES, FULL_STATE_NAMES } from '@/lib/utils'
+
+async function getStats() {
+  try {
+    const [servicRes, stateRes, countRes] = await Promise.all([
+      supabaseAdmin.from('companies').select('services').eq('active', true),
+      supabaseAdmin.from('companies').select('state').eq('active', true).not('state', 'is', null),
+      supabaseAdmin.from('companies').select('*', { count: 'exact', head: true }).eq('active', true),
+    ])
+
+    const serviceMap: Record<string, number> = {}
+    SERVICE_TYPES.forEach((s) => (serviceMap[s.value] = 0))
+    servicRes.data?.forEach((c) => {
+      c.services?.forEach((s: string) => {
+        if (serviceMap[s] !== undefined) serviceMap[s]++
+      })
+    })
+
+    const stateMap: Record<string, number> = {}
+    stateRes.data?.forEach((c) => {
+      if (c.state) stateMap[c.state] = (stateMap[c.state] || 0) + 1
+    })
+
+    const topStates = Object.entries(stateMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+
+    const uniqueStateCount = Object.keys(stateMap).length
+    const totalCompanies = countRes.count || 0
+
+    return { serviceMap, topStates, totalCompanies, uniqueStateCount }
+  } catch {
+    return { 
+      serviceMap: {} as Record<string, number>, 
+      topStates: [] as [string, number][],
+      totalCompanies: 0,
+      uniqueStateCount: 0,
+    }
+  }
+}
+
+export default async function HomePage() {
+  const { serviceMap, topStates, totalCompanies, uniqueStateCount } = 
+    await getStats()
+
+  const trustItems = [
+    `${totalCompanies.toLocaleString()}+ Companies Listed`,
+    `${uniqueStateCount || 50} States Covered`,
+    'Real Google Reviews',
+    'Free to Search',
+  ]
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <Header />
+      <main className="flex-1">
+
+        {/* Hero */}
+        <section className="bg-white py-16 sm:py-24 border-b border-gray-100">
+          <div className="max-w-4xl mx-auto px-4 text-center">
+            <h1 className="text-3xl sm:text-5xl font-bold text-[#1B3A6B] leading-tight mb-4">
+              Find Trusted Commercial Cleaning Companies Near You
+            </h1>
+            <p className="text-lg text-gray-500 mb-8 max-w-2xl mx-auto">
+              Browse verified commercial cleaning companies across the US. 
+              Compare services, read real reviews, and request free quotes.
+            </p>
+            <SearchForm />
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-sm text-gray-400">
+              {trustItems.map((item, i, arr) => (
+                <span key={item} className="flex items-center gap-4">
+                  {item}
+                  {i < arr.length - 1 && (
+                    <span className="hidden sm:inline text-gray-300">|</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* Tabbed Browse — Service + State combined */}
+        <BrowseSection serviceMap={serviceMap} topStates={topStates} />
+
+        {/* CTA for cleaning companies */}
+        <section className="py-16 bg-[#1B3A6B] text-white">
+          <div className="max-w-3xl mx-auto px-4 text-center">
+            <h2 className="text-2xl sm:text-3xl font-bold mb-4">
+              Own a Commercial Cleaning Company?
+            </h2>
+            <p className="text-blue-200 mb-8">
+              Facility managers in your city are actively searching for 
+              commercial cleaners right now. Claim your free listing and 
+              start receiving quote requests — no monthly fee to get started.
+            </p>
+            <Link
+              href="/claim"
+              className="inline-block bg-white text-navy font-bold px-8 
+                py-3 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              Claim Your Free Listing →
+            </Link>
+          </div>
+        </section>
+
+        {/* How It Works — moved to bottom, context for cleaners */}
+        <section className="py-16 bg-white">
+          <div className="max-w-5xl mx-auto px-4">
+            <h2 className="text-2xl sm:text-3xl font-bold text-[#1B3A6B] text-center mb-10">
+              How It Works
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+              {[
+                {
+                  icon: (
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  ),
+                  title: 'Search Your City',
+                  desc: 'Enter your city and service type to find local commercial cleaners',
+                },
+                {
+                  icon: (
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                    </svg>
+                  ),
+                  title: 'Compare & Review',
+                  desc: 'Read real Google reviews and compare companies side by side',
+                },
+                {
+                  icon: (
+                    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  ),
+                  title: 'Request Free Quotes',
+                  desc: 'Select up to 3 companies and receive quotes within 24 hours',
+                },
+              ].map((step, i) => (
+                <div key={step.title} 
+                  className="flex flex-col items-center text-center p-6 bg-gray-50 rounded-xl">
+                  <div className="w-16 h-16 bg-[#1B3A6B]/10 rounded-full 
+                    flex items-center justify-center text-[#1B3A6B] mb-4">
+                    {step.icon}
+                  </div>
+                  <div className="text-sm font-bold text-accent mb-1">
+                    Step {i + 1}
+                  </div>
+                  <h3 className="font-bold text-gray-900 text-lg mb-2">
+                    {step.title}
+                  </h3>
+                  <p className="text-gray-500 text-sm">{step.desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+      </main>
+      <Footer />
+    </div>
+  )
+}
+
+===================================================================
+Fix U2 — Quote form: move city/state, smart defaults, fix Step 3
+===================================================================
+
+In app/quote/page.tsx make these four changes:
+
+CHANGE 1 — Read URL params and set smart defaults.
+Inside QuoteContent(), find the searchParams reads. Currently only 
+'companies' is read. Add:
+
+  const preCity = searchParams.get('city') || ''
+  const preState = searchParams.get('state') || ''
+  const preService = searchParams.get('service') || ''
+
+Update the useState for form:
+
+  const [form, setForm] = useState({
+    service_type: preService,
+    building_type: 'Office Building',
+    building_size: '1,000–5,000 sq ft',
+    frequency: '',
+    city: preCity,
+    state: preState,
+    contact_name: '',
+    business_name: '',
+    contact_email: '',
+    contact_phone: '',
+    message: '',
+  })
+
+CHANGE 2 — Move city and state out of Step 1 into Step 2.
+
+In Step 1 JSX, DELETE the city input div and the state select div 
+entirely. Step 1 should only have: service_type, building_type, 
+building_size, frequency.
+
+Update validateStep1 to only check those 4:
+
+  const validateStep1 = () =>
+    !!form.service_type && !!form.building_type && 
+    !!form.building_size && !!form.frequency
+
+In Step 2 JSX, AFTER the contact_phone input div and BEFORE the 
+message textarea div, add:
+
+  <div>
+    <label className={labelCls}>
+      City <span className="text-red-500">*</span>
+    </label>
+    <input
+      className={inputCls}
+      value={form.city}
+      onChange={(e) => set('city', e.target.value)}
+      placeholder="Your city"
+    />
+  </div>
+  <div>
+    <label className={labelCls}>
+      State <span className="text-red-500">*</span>
+    </label>
+    <select
+      className={inputCls}
+      value={form.state}
+      onChange={(e) => set('state', e.target.value)}
+    >
+      <option value="">Select state</option>
+      {US_STATES.map((s) => (
+        <option key={s.code} value={s.code}>{s.name}</option>
+      ))}
+    </select>
+  </div>
+
+Update validateStep2 to also require city and state:
+
+  const validateStep2 = () => {
+    if (!form.contact_name || !form.business_name || 
+        !form.contact_email || !form.contact_phone ||
+        !form.city || !form.state) return false
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contact_email)) 
+      return false
+    if (form.contact_phone.replace(/\D/g, '').length < 10) 
+      return false
+    return true
+  }
+
+CHANGE 3 — Redesign Step 3.
+
+Find the Step 3 section. Replace its heading/trust area with:
+
+  <div className="text-center mb-6">
+    <h2 className="text-xl font-bold text-navy mb-2">Almost done</h2>
+    <p className="text-gray-600 text-sm max-w-sm mx-auto">
+      Only the {companies.length}{' '}
+      {companies.length === 1 ? 'company' : 'companies'} below will 
+      receive your contact details. No spam, no other contacts.
+    </p>
+  </div>
+
+Remove any existing blue info box with the trust statement 
+(it's being replaced by the above heading).
+
+CHANGE 4 — Fix the submit button text.
+
+Find the submit button. Currently it says:
+  'Send Quote Request — Free'
+Change to:
+  'Send My Quote Request'
+
+Make sure serviceLabel is imported from '@/lib/utils' and used 
+in the Step 3 review summary to display "Office Cleaning" 
+instead of "office".
+
+===================================================================
+Fix U3 — Fix toast message in search page
+===================================================================
+
+In app/search/page.tsx, find:
+
+  setToast('Maximum 3 companies — deselect one to add another.')
+
+Replace with:
+
+  setToast('3 companies selected — scroll down to send your request.')
+
+===================================================================
+Fix U4 — Claim form: save role, password match, rename Step 3,
+          add multi-select count
+===================================================================
+
+CHANGE 1 — In app/api/claim/route.ts, find:
+
+  await supabaseAdmin.from('users').insert({
+    email,
+    company_id,
+    role: 'company',
+  })
+
+Replace with:
+
+  await supabaseAdmin.from('users').insert({
+    email,
+    company_id,
+    role: body.role || 'company',
+  })
+
+CHANGE 2 — In app/claim/[slug]/page.tsx, find the confirm_password 
+input field. Directly after that input's closing </div>, add:
+
+  {form.confirm_password.length > 0 && form.password.length > 0 && (
+    <p className={`text-xs mt-1 ${
+      form.confirm_password === form.password 
+        ? 'text-green-600' 
+        : 'text-red-500'
+    }`}>
+      {form.confirm_password === form.password 
+        ? '✓ Passwords match' 
+        : 'Passwords do not match'}
+    </p>
+  )}
+
+CHANGE 3 — In app/claim/[slug]/page.tsx, find the Step 3 section.
+Change the h2 heading from:
+  "The Onboarding Survey"  (or "Quick Questions" if already changed)
+To:
+  "4 Quick Questions"
+
+Change the subtext from:
+  "Help us understand your business (takes 60 seconds)"
+  OR "Help us understand your business better."
+To:
+  "Help us match the right leads to your business — takes about 60 seconds."
+
+CHANGE 4 — For the how_getting_clients question, find:
+
+  <h3 className="font-semibold text-gray-900 mb-3">
+    How are you currently getting new clients?
+    <span className="text-gray-400 font-normal">(select all that apply)</span>
+  </h3>
+
+Replace with:
+
+  <h3 className="font-semibold text-gray-900 mb-3">
+    How are you currently getting new clients?{' '}
+    <span className="text-gray-400 font-normal text-sm">
+      (select all that apply)
+    </span>
+    {form.how_getting_clients.length > 0 && (
+      <span className="ml-2 text-xs bg-navy text-white rounded-full 
+        px-2 py-0.5 font-normal">
+        {form.how_getting_clients.length} selected
+      </span>
+    )}
+  </h3>
+
+===================================================================
+Fix U5 — Company profile: cap reviews, guard map
+===================================================================
+
+Create components/ReviewsList.tsx as a NEW client component:
+
+'use client'
+
+import { useState } from 'react'
+import StarRating from './StarRating'
+import { formatDate } from '@/lib/utils'
+
+interface Review {
+  id: string
+  author: string
+  rating: number
+  review_text: string
+  review_date: string
+}
+
+export default function ReviewsList({ reviews }: { reviews: Review[] }) {
+  const [showAll, setShowAll] = useState(false)
+  const visible = showAll ? reviews : reviews.slice(0, 5)
+
+  if (reviews.length === 0) {
+    return (
+      <p className="text-gray-500 text-sm">
+        No reviews yet for this company.
+      </p>
+    )
+  }
+
+  return (
+    <div>
+      <div className="space-y-4">
+        {visible.map((r) => (
+          <div key={r.id} 
+            className="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-semibold text-sm">{r.author}</span>
+              <span className="text-xs text-gray-400">
+                {formatDate(r.review_date)}
+              </span>
+            </div>
+            <StarRating rating={r.rating} size="sm" />
+            {r.review_text && (
+              <p className="text-sm text-gray-600 mt-2">{r.review_text}</p>
+            )}
+          </div>
+        ))}
+      </div>
+      {!showAll && reviews.length > 5 && (
+        <button
+          onClick={() => setShowAll(true)}
+          className="w-full mt-4 py-2.5 text-sm text-accent font-medium 
+            border border-accent/30 rounded-lg hover:bg-accent/5 
+            transition-colors"
+        >
+          Show {reviews.length - 5} more review
+          {reviews.length - 5 === 1 ? '' : 's'}
+        </button>
+      )}
+    </div>
+  )
+}
+
+In app/company/[slug]/page.tsx:
+
+1. Add import at top:
+   import ReviewsList from '@/components/ReviewsList'
+
+2. Find the reviews section. Replace the existing reviews render:
+   
+   FIND this block (roughly):
+     {reviews.length === 0 ? (
+       <p className="text-gray-500 text-sm">No reviews yet...</p>
+     ) : (
+       <div className="space-y-4">
+         {reviews.map((r) => ( ... ))}
+       </div>
+     )}
+   
+   REPLACE with:
+     <ReviewsList reviews={reviews} />
+
+3. Guard the map section. Find the iframe embed block.
+   Wrap the entire map section div with:
+   
+   {(company.address || (company.city && company.state)) && (
+     // existing map section JSX
+   )}
+
+===================================================================
+Fix U6 — Dashboard listing: add "View your live listing" link
+===================================================================
+
+In app/dashboard/listing/page.tsx, find the Save button:
+
+  <button onClick={save} disabled={saving} 
+    className="w-full bg-navy...">
+    {saving ? 'Saving…' : saved ? '✓ Saved!' : 'Save Changes'}
+  </button>
+
+Add this immediately after the button:
+
+  {company?.slug && (
+    
+      href={`/company/${company.slug}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="text-sm text-accent hover:underline text-center 
+        block mt-3"
+    >
+      View your live listing →
+    </a>
+  )}
+
+===================================================================
+VERIFICATION CHECKLIST
+===================================================================
+
+1. Homepage: confirm only 3 sections visible — Hero, tabbed Browse 
+   (service/state in one section), Cleaner CTA, How It Works.
+   How It Works should now be at the BOTTOM, not second.
+   Trust bar should show real numbers from database, not "5,600+".
+
+2. Homepage: click a service card — confirm it goes to 
+   /service/office not /search?service=office.
+
+3. Quote form: go to /commercial-cleaning/austin-tx, select a 
+   company, click Request Quotes.
+   Step 1 should have EXACTLY 4 fields: service, building type, 
+   building size, frequency. NO city or state on Step 1.
+   Building type should pre-select "Office Building."
+   Building size should pre-select "1,000–5,000 sq ft."
+
+4. Quote form Step 2: confirm city and state fields appear here.
+   If coming from an Austin TX pSEO page, city should pre-fill 
+   "Austin" and state should pre-fill "TX".
+
+5. Quote form Step 3: heading says "Almost done." Trust message 
+   is prominent. Submit button says "Send My Quote Request" 
+   with no "— Free."
+
+6. Search page: select 3 companies — confirm toast says 
+   "3 companies selected — scroll down to send your request."
+   NOT "deselect one to add another."
+
+7. Claim flow Step 2: type matching passwords — confirm green 
+   "✓ Passwords match" appears. Type non-matching — confirm red.
+
+8. Claim flow Step 3: heading says "4 Quick Questions."
+   Select 2 "how getting clients" options — confirm blue badge 
+   shows "(2 selected)" next to the question.
+
+9. Company profile with 10+ reviews: confirm only 5 show on 
+   load with "Show X more reviews" button below.
+
+10. Company profile with no address: confirm map section 
+    does NOT render (no broken iframe).
+
+11. Dashboard listing page: after company loads, confirm 
+    "View your live listing →" link appears below Save button.

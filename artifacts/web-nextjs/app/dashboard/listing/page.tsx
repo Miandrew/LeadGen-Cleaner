@@ -197,6 +197,16 @@ export default function DashboardListingPage() {
           <button onClick={save} disabled={saving} className="w-full bg-navy disabled:bg-gray-300 hover:bg-navy/90 text-white font-semibold py-3 rounded-lg text-sm transition-colors">
             {saving ? 'Saving…' : saved ? '✓ Saved!' : 'Save Changes'}
           </button>
+          {company?.slug && (
+            <a
+              href={`/company/${company.slug}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-accent hover:underline text-center block mt-3"
+            >
+              View your live listing →
+            </a>
+          )}
         </div>
 
         {/* Preview */}

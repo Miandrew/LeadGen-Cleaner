@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     await supabaseAdmin.from('users').insert({
       email,
       company_id,
-      role: 'company',
+      role: role || 'company',
     })
 
     await supabaseAdmin.from('companies').update({ claimed: true }).eq('id', company_id)

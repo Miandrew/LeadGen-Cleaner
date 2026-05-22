@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Header from '@/components/Header'
 import CompanyLogo from '@/components/CompanyLogo'
-import { SERVICE_TYPES, US_STATES } from '@/lib/utils'
+import { SERVICE_TYPES, US_STATES, serviceLabel } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 
 interface Company {
@@ -32,8 +32,8 @@ function QuoteContent() {
 
   const [form, setForm] = useState({
     service_type: prefillService,
-    building_type: '',
-    building_size: '',
+    building_type: 'Office Building',
+    building_size: '1,000–5,000 sq ft',
     frequency: '',
     city: prefillCity,
     state: prefillState,
@@ -57,14 +57,13 @@ function QuoteContent() {
   const set = (k: string, v: string) => setForm((prev) => ({ ...prev, [k]: v }))
 
   const validateStep1 = () =>
-    form.service_type && form.building_type && form.building_size && form.frequency && form.city && form.state
+    !!form.service_type && !!form.building_type && !!form.building_size && !!form.frequency
 
   const validateStep2 = () => {
-    if (!form.contact_name || !form.business_name || !form.contact_email || !form.contact_phone)
-      return false
+    if (!form.contact_name || !form.business_name || !form.contact_email || !form.contact_phone ||
+        !form.city || !form.state) return false
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.contact_email)) return false
-    if (!/^\d/.test(form.contact_phone) || form.contact_phone.replace(/\D/g, '').length < 10)
-      return false
+    if (form.contact_phone.replace(/\D/g, '').length < 10) return false
     return true
   }
 
@@ -154,17 +153,6 @@ function QuoteContent() {
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label className={labelCls}>City</label>
-                    <input className={inputCls} value={form.city} onChange={(e) => set('city', e.target.value)} placeholder="Your city" />
-                  </div>
-                  <div>
-                    <label className={labelCls}>State</label>
-                    <select className={inputCls} value={form.state} onChange={(e) => set('state', e.target.value)}>
-                      <option value="">Select state</option>
-                      {US_STATES.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
-                    </select>
-                  </div>
                   <button
                     onClick={() => validateStep1() && setStep(2)}
                     disabled={!validateStep1()}
@@ -197,6 +185,17 @@ function QuoteContent() {
                     <input type="tel" className={inputCls} value={form.contact_phone} onChange={(e) => set('contact_phone', e.target.value)} placeholder="(555) 000-0000" />
                   </div>
                   <div>
+                    <label className={labelCls}>City <span className="text-red-500">*</span></label>
+                    <input className={inputCls} value={form.city} onChange={(e) => set('city', e.target.value)} placeholder="Your city" />
+                  </div>
+                  <div>
+                    <label className={labelCls}>State <span className="text-red-500">*</span></label>
+                    <select className={inputCls} value={form.state} onChange={(e) => set('state', e.target.value)}>
+                      <option value="">Select state</option>
+                      {US_STATES.map((s) => <option key={s.code} value={s.code}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
                     <label className={labelCls}>Additional Notes <span className="text-gray-400">(optional)</span></label>
                     <textarea className={inputCls} rows={3} value={form.message} onChange={(e) => set('message', e.target.value)} placeholder="Any special requirements…" />
                   </div>
@@ -210,9 +209,15 @@ function QuoteContent() {
 
             {step === 3 && (
               <div>
-                <h2 className="text-xl font-bold text-navy mb-6">Review and Submit</h2>
+                <div className="text-center mb-6">
+                  <h2 className="text-xl font-bold text-navy mb-2">Almost done</h2>
+                  <p className="text-gray-600 text-sm max-w-sm mx-auto">
+                    Only the {companies.length}{' '}
+                    {companies.length === 1 ? 'company' : 'companies'} below will receive your contact details. No spam, no other contacts.
+                  </p>
+                </div>
                 <div className="bg-gray-50 rounded-lg p-4 mb-4 text-sm space-y-1">
-                  <div><span className="font-medium">Service:</span> {form.service_type}</div>
+                  <div><span className="font-medium">Service:</span> {serviceLabel(form.service_type)}</div>
                   <div><span className="font-medium">Building:</span> {form.building_type}, {form.building_size}</div>
                   <div><span className="font-medium">Frequency:</span> {form.frequency}</div>
                   <div><span className="font-medium">Location:</span> {form.city}, {form.state}</div>
@@ -233,14 +238,11 @@ function QuoteContent() {
                     </div>
                   </div>
                 )}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-xs text-blue-700 mb-4">
-                  Your contact details will only be shared with the {companies.length} {companies.length === 1 ? 'company' : 'companies'} shown above. You will not be contacted by any other company.
-                </div>
                 {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
                 <div className="flex gap-3">
                   <button onClick={() => setStep(2)} className="flex-1 border border-gray-300 text-gray-700 font-semibold py-3 rounded-lg text-sm hover:bg-gray-50 transition-colors">← Back</button>
                   <button onClick={submit} disabled={loading} className="flex-1 bg-navy disabled:bg-gray-300 hover:bg-navy/90 text-white font-semibold py-3 rounded-lg text-sm transition-colors">
-                    {loading ? 'Sending…' : 'Send Quote Request — Free'}
+                    {loading ? 'Sending…' : 'Send My Quote Request'}
                   </button>
                 </div>
               </div>
