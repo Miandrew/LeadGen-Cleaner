@@ -76,19 +76,8 @@ export default function ClaimPage() {
             refresh_token: data.session.refresh_token,
           })
         }
-        const segment = data.segment
-        if (segment === 'HOT' || segment === 'WARM') {
-          const params = new URLSearchParams({
-            company_id: company?.id || '',
-            email: form.email,
-            name: form.full_name,
-            segment,
-            city: company?.city || data.company?.city || '',
-          })
-          router.push(`/claim/book?${params.toString()}`)
-        } else {
-          router.push('/dashboard')
-        }
+        const verifyParams = new URLSearchParams({ name: form.full_name })
+        router.push(`/claim/verify?${verifyParams.toString()}`)
       } else {
         setError(data.error || 'Something went wrong.')
       }

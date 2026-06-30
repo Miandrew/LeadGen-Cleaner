@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS companies (
   do_not_email            boolean DEFAULT false,
   cashflow_flag           boolean DEFAULT false,
   acquisition_flag        boolean DEFAULT false,
+  verification_status     text DEFAULT 'pending',  -- 'pending' | 'verified'
   created_at              timestamp DEFAULT now()
 );
 

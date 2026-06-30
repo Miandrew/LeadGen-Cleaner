@@ -44,6 +44,11 @@ export default async function DashboardPage() {
   if (!user?.company_id) redirect('/claim')
 
   const company = user.companies as Record<string, unknown>
+
+  if (company.verification_status === 'pending') {
+    redirect('/claim/verify')
+  }
+
   const { score, missing } = profileCompletion(company)
 
   const cutoff72h = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()

@@ -103,7 +103,7 @@ export async function finalizeClaim(input: FinalizeClaimInput): Promise<Finalize
 
   await supabaseAdmin
     .from('companies')
-    .update({ claimed: true, cashflow_flag, acquisition_flag })
+    .update({ claimed: true, cashflow_flag, acquisition_flag, verification_status: 'pending' })
     .eq('id', company.id)
 
   await supabaseAdmin.from('company_onboarding').insert({

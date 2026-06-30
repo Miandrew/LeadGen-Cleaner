@@ -16,20 +16,15 @@
       "static/chunks/main-app.js",
       "static/chunks/app/not-found.js"
     ],
-    "/claim/page": [
+    "/claim/verify/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/claim/page.js"
+      "static/chunks/app/claim/verify/page.js"
     ],
-    "/claim/new/page": [
+    "/login/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
-      "static/chunks/app/claim/new/page.js"
-    ],
-    "/claim/call/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/claim/call/page.js"
+      "static/chunks/app/login/page.js"
     ]
   }
 }
