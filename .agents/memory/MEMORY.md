@@ -1,0 +1,1 @@
+- [API proxy conflict with api-server scaffold](api-server-routing.md) — the unused api-server artifact owns /api and intercepts all Next.js API routes in dev and production.

@@ -1,6 +1,7 @@
 {
   "/page": "app/page.js",
-  "/claim/call/page": "app/claim/call/page.js",
-  "/claim/page": "app/claim/page.js",
-  "/claim/new/page": "app/claim/new/page.js"
+  "/api/company-by-slug/route": "app/api/company-by-slug/route.js",
+  "/api/claim/route": "app/api/claim/route.js",
+  "/api/claim-call/route": "app/api/claim-call/route.js",
+  "/claim/page": "app/claim/page.js"
 }
