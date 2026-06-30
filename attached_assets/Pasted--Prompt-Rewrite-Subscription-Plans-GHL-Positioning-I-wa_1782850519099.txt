@@ -1,0 +1,215 @@
+# Prompt — Rewrite Subscription Plans & GHL Positioning
+
+I want to redesign the subscription section of CommercialCleaningNearMe.com.
+
+## Context
+
+CommercialCleaningNearMe.com is **not** a GoHighLevel agency.
+
+It is a commercial cleaning marketplace and growth platform.
+
+Companies come here primarily because they want:
+
+* More commercial cleaning contracts
+* Faster response to new opportunities
+* Better follow-up
+* More Google reviews
+* Better visibility
+* Better organization
+
+GoHighLevel is simply the backend software that powers some of these services. It should almost never be mentioned in customer-facing copy.
+
+The customer is buying outcomes, not software.
+
+---
+
+## Rewrite the subscription plans
+
+Replace the existing plans with these principles.
+
+### Pay As You Go
+
+**$35 per qualified lead**
+
+Perfect for companies that want to try the platform with no monthly commitment.
+
+Features:
+
+* Purchase qualified commercial cleaning opportunities individually
+* Only pay for the leads you choose
+* View lead details before purchasing
+* No subscription required
+
+---
+
+### Growth
+
+**$199/month**
+
+Headline:
+
+**Win More Commercial Cleaning Contracts**
+
+Short description:
+
+Designed for growing commercial cleaning companies that want consistent opportunities and automated follow-up.
+
+Features:
+
+* Priority access to qualified commercial cleaning opportunities
+* Monthly lead allocation (do NOT promise guaranteed leads—design the UI so this can be configured by an admin)
+* Instant SMS follow-up for every new lead
+* Missed-call text back
+* Automated review request campaigns
+* CRM pipeline for every opportunity
+* Higher placement within directory search results
+* Email support
+
+---
+
+### Unlimited
+
+**$399/month**
+
+Headline:
+
+**Become the Highest Visibility Cleaning Company in Your Market**
+
+Short description:
+
+For established companies focused on growth, efficiency, and market leadership.
+
+Features:
+
+Everything in Growth plus:
+
+* Highest priority for marketplace lead distribution
+* Semi-exclusive leads (maximum allocation rules configurable by admin)
+* Google Business Profile management workflow
+* Review monitoring and response workflow
+* Advanced pipeline reporting
+* Monthly strategy session scheduling
+* Priority support
+
+---
+
+## IMPORTANT
+
+Never say:
+
+"Includes GoHighLevel"
+
+Never market software.
+
+Everything should be written as business outcomes.
+
+---
+
+## Architecture Changes
+
+Update the subscription logic.
+
+The marketplace controls lead distribution.
+
+GoHighLevel handles:
+
+* CRM
+* Pipelines
+* SMS automation
+* Email automation
+* Missed call text-back
+* Review requests
+* Workflow automation
+* Contact management
+
+The marketplace controls:
+
+* Lead generation
+* Lead qualification
+* Lead allocation
+* Directory ranking
+* Featured listings
+* Subscription eligibility
+* Billing logic
+
+Keep those responsibilities completely separate.
+
+---
+
+## Dashboard Improvements
+
+Replace "CRM" wording with language business owners understand.
+
+Examples:
+
+Instead of:
+
+CRM Pipeline
+
+Use:
+
+Sales Pipeline
+
+Instead of:
+
+Contacts
+
+Use:
+
+Prospects
+
+Instead of:
+
+Automations
+
+Use:
+
+Lead Follow-Up
+
+---
+
+## Subscription Page
+
+Completely redesign it.
+
+Focus on benefits.
+
+Avoid software language.
+
+Each plan should answer one question:
+
+"What will this do for my business?"
+
+---
+
+## Sales Copy Style
+
+Use the tone of companies like:
+
+* ServiceTitan
+* Housecall Pro
+* Jobber
+
+Simple.
+
+Professional.
+
+Confident.
+
+Benefit-driven.
+
+No buzzwords.
+
+---
+
+## Final Requirement
+
+Review every piece of copy on the subscription page.
+
+If it sounds like software marketing, rewrite it so it sounds like a commercial cleaning growth platform.
+
+Keep all existing functionality working.
+
+Only update the subscription experience, wording, and plan architecture.
+
+If any implementation detail is unclear, ask before generating code.
