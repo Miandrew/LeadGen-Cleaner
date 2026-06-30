@@ -111,6 +111,29 @@ function ClaimSearchContent() {
             )}
           </div>
 
+          <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col">
+              <h3 className="font-semibold text-gray-900 mb-1">Don&apos;t see your company?</h3>
+              <p className="text-sm text-gray-500 mb-4 flex-1">Add your business to the directory in 2 minutes</p>
+              <button
+                onClick={() => router.push('/claim/new')}
+                className="bg-navy text-white font-semibold px-4 py-2.5 rounded-lg text-sm hover:bg-navy/90 transition-colors"
+              >
+                Add My Company →
+              </button>
+            </div>
+            <div className="bg-white rounded-xl border border-gray-200 p-6 flex flex-col">
+              <h3 className="font-semibold text-gray-900 mb-1">Prefer to talk it through?</h3>
+              <p className="text-sm text-gray-500 mb-4 flex-1">Book a free 15-minute call — we&apos;ll set up your listing together</p>
+              <button
+                onClick={() => router.push('/claim/call')}
+                className="bg-white border border-navy text-navy font-semibold px-4 py-2.5 rounded-lg text-sm hover:bg-navy/5 transition-colors"
+              >
+                Book a Call →
+              </button>
+            </div>
+          </div>
+
           <div className="mt-10 grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
             {[
               { icon: '📋', title: 'Manage Your Profile', desc: 'Update your services, photos, and business info' },
