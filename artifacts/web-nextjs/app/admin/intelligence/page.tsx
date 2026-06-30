@@ -12,7 +12,7 @@ export default async function AdminIntelligencePage() {
 
   const { data: rows } = await supabaseAdmin
     .from('company_onboarding')
-    .select('*, companies(id, name, city, state, email, created_at)')
+    .select('*, companies(id, name, city, state, email, created_at, cashflow_flag, acquisition_flag)')
     .order('created_at', { ascending: false })
 
   const hot = (rows || []).filter((r: { segment: string }) => r.segment === 'HOT')

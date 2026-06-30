@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { getRelativeTime } from '@/lib/utils'
 
@@ -35,6 +34,8 @@ export default function DashboardLeadsPage() {
   const [purchasedLeads, setPurchasedLeads] = useState<Purchase[]>([])
   const [usingStateFallback, setUsingStateFallback] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set())
+  const [requestingId, setRequestingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!supabase) { router.push('/login'); return }
@@ -74,6 +75,12 @@ export default function DashboardLeadsPage() {
         .eq('company_id', user.company_id)
         .order('purchased_at', { ascending: false })
 
+      const { data: requests } = await supabase
+        .from('lead_requests')
+        .select('lead_id')
+        .eq('company_id', user.company_id)
+      setRequestedIds(new Set((requests || []).map((r: { lead_id: string }) => r.lead_id)))
+
       setAvailableLeads((avail || []) as Lead[])
       const normalizedPurchased: Purchase[] = (purchased || []).map((p: { id: string; purchased_at: string; amount_paid: number; leads: Lead | Lead[] | null }) => ({
         id: p.id,
@@ -85,6 +92,24 @@ export default function DashboardLeadsPage() {
       setLoading(false)
     })
   }, [router])
+
+  const requestLead = async (leadId: string) => {
+    if (!company) return
+    setRequestingId(leadId)
+    try {
+      const res = await fetch('/api/request-lead', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lead_id: leadId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setRequestedIds((prev) => new Set(prev).add(leadId))
+      }
+    } finally {
+      setRequestingId(null)
+    }
+  }
 
   const thCls = 'text-left text-xs font-semibold text-gray-500 uppercase tracking-wider py-3 px-4'
   const tdCls = 'py-3 px-4 text-sm text-gray-700'
@@ -146,12 +171,19 @@ export default function DashboardLeadsPage() {
                     <td className={tdCls}>{getRelativeTime(lead.created_at)}</td>
                     <td className={tdCls}>
                       {company && (
-                        <Link
-                          href={`/unlock-lead/${lead.id}/${company.id}`}
-                          className="bg-accent text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-accent/90 transition-colors whitespace-nowrap"
-                        >
-                          Unlock Lead
-                        </Link>
+                        requestedIds.has(lead.id) ? (
+                          <span className="inline-block bg-green-100 text-green-700 text-xs font-semibold px-3 py-1.5 rounded-lg whitespace-nowrap">
+                            ✓ Requested — we&apos;ll be in touch
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => requestLead(lead.id)}
+                            disabled={requestingId === lead.id}
+                            className="bg-accent text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-accent/90 transition-colors whitespace-nowrap disabled:opacity-60"
+                          >
+                            {requestingId === lead.id ? 'Requesting…' : 'Request This Lead'}
+                          </button>
+                        )
                       )}
                     </td>
                   </tr>

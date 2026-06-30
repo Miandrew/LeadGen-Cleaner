@@ -1,0 +1,63 @@
+I need to update the claim flow survey, segmentation logic, and remove all self-serve pricing visibility from the company-facing dashboard. Make these exact changes. Keep all existing code working unless explicitly told to remove it.
+
+PART 1 — Update the claim flow survey
+
+Find the 3-step claim form (likely in a file related to /claim or /onboarding). Replace the existing "4 Quick Questions" survey (currently asking about: how they get clients, biggest challenge, how many new clients monthly, marketing budget) with these exact 4 questions:
+
+Question 1: "How are you currently getting most of your new commercial clients?"
+Type: multi-select checkboxes
+Options: "Referrals / word of mouth", "Google or SEO", "Paid ads", "Cold outreach", "Not consistently — that's the problem"
+Field name: lead_source
+
+Question 2: "What's the biggest challenge in your business right now?"
+Type: single-select
+Options: "Not enough leads / inconsistent work", "Missed calls or slow follow-up", "Cash flow — getting paid on time", "Hiring and keeping good staff", "Managing scheduling and operations", "Already busy — thinking about growth or eventually selling the business"
+Field name: biggest_challenge
+
+Question 3: "How many active commercial accounts are you currently servicing?"
+Type: single-select
+Options: "1-5", "6-20", "21-50", "50+"
+Field name: active_accounts
+
+Question 4: "If quality leads came in today, how many new accounts could you realistically take on this month?"
+Type: single-select
+Options: "0-1, we're at capacity", "2-4", "5-9", "10+"
+Field name: growth_capacity
+
+Remove the old "marketing_budget" field entirely from the schema and form. Make all 4 questions mandatory — no skipping, same as the current behavior.
+
+PART 2 — Update segmentation logic
+
+Find the segmentation function that currently assigns HOT/WARM/NURTURE based on "not enough leads" + budget over $1000. Replace it with this logic:
+
+HOT if: (biggest_challenge is "Not enough leads / inconsistent work" OR biggest_challenge is "Missed calls or slow follow-up") AND (active_accounts is "6-20" OR "21-50" OR "50+" OR growth_capacity is "5-9" OR "10+")
+
+WARM if: not HOT, and (biggest_challenge is "Hiring and keeping good staff" OR "Managing scheduling and operations" OR (biggest_challenge is "Not enough leads / inconsistent work" and active_accounts is "1-5"))
+
+NURTURE if: not HOT or WARM, specifically active_accounts is "1-5" AND growth_capacity is "0-1, we're at capacity"
+
+Default any unmatched combination to WARM.
+
+Additionally add two independent boolean flags stored on the company record, separate from the HOT/WARM/NURTURE segment:
+cashflow_flag = true if biggest_challenge is "Cash flow — getting paid on time"
+acquisition_flag = true if biggest_challenge is "Already busy — thinking about growth or eventually selling the business"
+
+These flags should display prominently in /admin/intelligence as separate badges or tags on the company row, regardless of what HOT/WARM/NURTURE segment the company falls into. Add a filter in admin/intelligence to filter by cashflow_flag = true and separately by acquisition_flag = true, so I can pull a list of acquisition-flagged companies at any time.
+
+PART 3 — Remove self-serve pricing from the company-facing dashboard
+
+On /dashboard, find anywhere a dollar amount is displayed to the logged-in cleaning company. This includes: the per-lead unlock price (currently $35), the subscription page showing Essentials $149 and Growth $349, and any pricing mentioned in dashboard cards or CTAs.
+
+Remove all dollar amounts from these surfaces. Specifically:
+
+1. Find the "Unlock Lead" button/flow on available leads. Currently it goes to a Stripe checkout showing $35. Change this so the button instead says "Request This Lead" and on click, it does NOT go to Stripe checkout. Instead it should: mark the lead as "requested" in the database, send a notification email to ADMIN_EMAIL with the company name and the lead details, and update the button state to show "Requested — we'll be in touch" instead of letting them complete a purchase themselves.
+
+2. Find the subscription page (likely /dashboard/subscribe or similar) showing Essentials and Growth tiers with prices. Replace this entire page with a simple page that says: "Interested in automating your lead delivery? Book a quick call and we'll walk you through the options that fit your business." Include a button "Book a Call" that links to NEXT_PUBLIC_CALENDLY_URL. Remove all references to tier names, prices, and lead counts from this page.
+
+3. Find any other place on the dashboard where prices appear — for example dashboard summary cards, navigation, or onboarding messaging — and remove the dollar amounts from that text. Replace specific price mentions with generic phrasing like "unlock this lead" or "talk to us about your options" instead of showing numbers.
+
+4. Do NOT remove or break the actual Stripe checkout code itself — keep it intact and functional in the codebase, just disconnect it from the self-serve "Unlock Lead" button described above. I will trigger Stripe payment links manually myself when needed, outside the public dashboard flow.
+
+5. Make sure /admin and /admin/intelligence are NOT affected by any of this — admin views should continue showing full pricing, full survey answers, and the new cashflow_flag and acquisition_flag exactly as before. This pricing restriction only applies to the company-facing /dashboard routes.
+
+After making these changes, show me the full diff of every file you touched before I confirm.

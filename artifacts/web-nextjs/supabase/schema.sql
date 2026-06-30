@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS companies (
   claimed                 boolean DEFAULT false,
   active                  boolean DEFAULT true,
   do_not_email            boolean DEFAULT false,
+  cashflow_flag           boolean DEFAULT false,
+  acquisition_flag        boolean DEFAULT false,
   created_at              timestamp DEFAULT now()
 );
 
@@ -149,15 +151,25 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- ─── Company Onboarding ─────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS company_onboarding (
-  id                    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id            uuid REFERENCES companies(id),
-  how_getting_clients   text[],
-  biggest_challenge     text,
-  new_clients_per_month text,
-  marketing_budget      text,
-  segment               text,
-  contacted             boolean DEFAULT false,
-  created_at            timestamp DEFAULT now()
+  id                uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id        uuid REFERENCES companies(id),
+  lead_source       text[],
+  biggest_challenge text,
+  active_accounts   text,
+  growth_capacity   text,
+  segment           text,
+  contacted         boolean DEFAULT false,
+  created_at        timestamp DEFAULT now()
+);
+
+-- ─── Lead Requests (self-serve "Request This Lead" — no payment) ─────────────
+CREATE TABLE IF NOT EXISTS lead_requests (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id       uuid REFERENCES leads(id),
+  company_id    uuid REFERENCES companies(id),
+  status        text DEFAULT 'requested',
+  requested_at  timestamp DEFAULT now(),
+  UNIQUE(lead_id, company_id)
 );
 
 -- ─── Featured Listings ──────────────────────────────────────────────────────

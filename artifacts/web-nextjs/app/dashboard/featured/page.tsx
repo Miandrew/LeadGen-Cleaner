@@ -81,11 +81,10 @@ export default function FeaturedPage() {
       placementType: 'city',
       priceId: process.env.NEXT_PUBLIC_STRIPE_CITY_FEATURED_PRICE_ID || '',
       name: 'City Featured',
-      price: '$49/month',
       desc: company
         ? `Appear at the top of search results in ${company.city}.`
         : 'Appear at the top of search results in your city.',
-      cta: 'Get City Featured',
+      cta: 'Talk to us about City Featured',
       badge: 'Local Boost',
     },
     {
@@ -93,11 +92,10 @@ export default function FeaturedPage() {
       placementType: 'state',
       priceId: process.env.NEXT_PUBLIC_STRIPE_STATE_FEATURED_PRICE_ID || '',
       name: 'State Featured',
-      price: '$99/month',
       desc: company
         ? `Appear at the top of all results across ${company.state}.`
         : 'Appear at the top of all results across your state.',
-      cta: 'Get State Featured',
+      cta: 'Talk to us about State Featured',
       badge: 'State-Wide',
     },
     {
@@ -105,9 +103,8 @@ export default function FeaturedPage() {
       placementType: 'homepage',
       priceId: process.env.NEXT_PUBLIC_STRIPE_HOMEPAGE_FEATURED_PRICE_ID || '',
       name: 'Homepage Featured',
-      price: '$199/month',
       desc: `Appear in the Featured Companies section on the homepage. Limited to 6 spots nationally. ${homepageSlots}/6 slots filled.`,
-      cta: 'Get Homepage Featured',
+      cta: 'Talk to us about Homepage Featured',
       badge: 'National',
     },
   ]
@@ -138,8 +135,7 @@ export default function FeaturedPage() {
                   </span>
                 )}
               </div>
-              <h2 className="text-lg font-bold text-navy mb-1">{opt.name}</h2>
-              <div className="text-2xl font-black text-gray-900 mb-2">{opt.price}</div>
+              <h2 className="text-lg font-bold text-navy mb-2">{opt.name}</h2>
               <p className="text-sm text-gray-500 mb-6 flex-1">{opt.desc}</p>
               {active ? (
                 <div className="w-full text-center py-2.5 rounded-xl bg-green-50 text-green-700 text-sm font-semibold border border-green-200">

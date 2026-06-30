@@ -30,10 +30,10 @@ export default function ClaimPage() {
     confirmed: false,
     password: '',
     confirm_password: '',
-    how_getting_clients: [] as string[],
+    lead_source: [] as string[],
     biggest_challenge: '',
-    new_clients_per_month: '',
-    marketing_budget: '',
+    active_accounts: '',
+    growth_capacity: '',
   })
 
   useEffect(() => {
@@ -247,31 +247,31 @@ export default function ClaimPage() {
                 <div className="space-y-6">
                   <div>
                     <h3 className="font-semibold text-gray-900 mb-3">
-                      How are you currently getting new clients?{' '}
+                      How are you currently getting most of your new commercial clients?{' '}
                       <span className="text-gray-400 font-normal text-sm">(select all that apply)</span>
-                      {form.how_getting_clients.length > 0 && (
+                      {form.lead_source.length > 0 && (
                         <span className="ml-2 text-xs bg-navy text-white rounded-full px-2 py-0.5 font-normal">
-                          {form.how_getting_clients.length} selected
+                          {form.lead_source.length} selected
                         </span>
                       )}
                     </h3>
                     <div className="grid grid-cols-1 gap-2">
-                      {['Word of mouth and referrals', 'Google Ads', 'Social media marketing', 'Other directories or platforms', 'We struggle to find new clients consistently'].map((opt) => (
+                      {['Referrals / word of mouth', 'Google or SEO', 'Paid ads', 'Cold outreach', "Not consistently — that's the problem"].map((opt) => (
                         <OptionCard
                           key={opt}
                           value={opt}
                           label={opt}
-                          selected={form.how_getting_clients.includes(opt)}
-                          onClick={() => set('how_getting_clients', toggleMulti(form.how_getting_clients, opt))}
+                          selected={form.lead_source.includes(opt)}
+                          onClick={() => set('lead_source', toggleMulti(form.lead_source, opt))}
                         />
                       ))}
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-3">What is your biggest challenge right now?</h3>
+                    <h3 className="font-semibold text-gray-900 mb-3">What&apos;s the biggest challenge in your business right now?</h3>
                     <div className="grid grid-cols-1 gap-2">
-                      {['Not getting enough leads', 'Leads cost too much', 'Hard to compete on price', 'Getting more reviews', 'Managing existing clients'].map((opt) => (
+                      {['Not enough leads / inconsistent work', 'Missed calls or slow follow-up', 'Cash flow — getting paid on time', 'Hiring and keeping good staff', 'Managing scheduling and operations', 'Already busy — thinking about growth or eventually selling the business'].map((opt) => (
                         <OptionCard
                           key={opt}
                           value={opt}
@@ -284,30 +284,30 @@ export default function ClaimPage() {
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-3">How many new clients are you looking to add per month?</h3>
+                    <h3 className="font-semibold text-gray-900 mb-3">How many active commercial accounts are you currently servicing?</h3>
                     <div className="grid grid-cols-2 gap-2">
-                      {['1–2 new clients', '3–5 new clients', '5–10 new clients', '10 or more'].map((opt) => (
+                      {['1-5', '6-20', '21-50', '50+'].map((opt) => (
                         <OptionCard
                           key={opt}
                           value={opt}
                           label={opt}
-                          selected={form.new_clients_per_month === opt}
-                          onClick={() => set('new_clients_per_month', opt)}
+                          selected={form.active_accounts === opt}
+                          onClick={() => set('active_accounts', opt)}
                         />
                       ))}
                     </div>
                   </div>
 
                   <div>
-                    <h3 className="font-semibold text-gray-900 mb-3">What is your monthly marketing budget?</h3>
+                    <h3 className="font-semibold text-gray-900 mb-3">If quality leads came in today, how many new accounts could you realistically take on this month?</h3>
                     <div className="grid grid-cols-2 gap-2">
-                      {['Under $200/month', '$200–$500/month', '$500–$1,000/month', 'Over $1,000/month'].map((opt) => (
+                      {["0-1, we're at capacity", '2-4', '5-9', '10+'].map((opt) => (
                         <OptionCard
                           key={opt}
                           value={opt}
                           label={opt}
-                          selected={form.marketing_budget === opt}
-                          onClick={() => set('marketing_budget', opt)}
+                          selected={form.growth_capacity === opt}
+                          onClick={() => set('growth_capacity', opt)}
                         />
                       ))}
                     </div>
@@ -318,8 +318,15 @@ export default function ClaimPage() {
                 <div className="flex gap-3 mt-6">
                   <button onClick={() => setStep(2)} className="flex-1 border border-gray-300 text-gray-700 font-semibold py-3 rounded-lg text-sm hover:bg-gray-50 transition-colors">← Back</button>
                   <button
-                    onClick={submitClaim}
-                    disabled={loading || !form.biggest_challenge || !form.new_clients_per_month || !form.marketing_budget}
+                    onClick={() => {
+                      if (!form.lead_source.length || !form.biggest_challenge || !form.active_accounts || !form.growth_capacity) {
+                        setError('Please answer all 4 questions.')
+                        return
+                      }
+                      setError('')
+                      submitClaim()
+                    }}
+                    disabled={loading || !form.lead_source.length || !form.biggest_challenge || !form.active_accounts || !form.growth_capacity}
                     className="flex-1 bg-navy disabled:bg-gray-300 hover:bg-navy/90 text-white font-semibold py-3 rounded-lg text-sm transition-colors"
                   >
                     {loading ? 'Setting up…' : 'Complete Setup and Claim My Listing →'}

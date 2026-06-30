@@ -7,11 +7,21 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const {
       company_id, slug, full_name, email, password, phone, role,
-      how_getting_clients, biggest_challenge, new_clients_per_month, marketing_budget,
+      lead_source, biggest_challenge, active_accounts, growth_capacity,
     } = body
 
     if (!company_id || !slug || !email || !password) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    }
+
+    // Enforce the 4 mandatory survey answers server-side (not just in the UI)
+    if (
+      !Array.isArray(lead_source) || lead_source.length === 0 ||
+      !biggest_challenge ||
+      !active_accounts ||
+      !growth_capacity
+    ) {
+      return NextResponse.json({ error: 'Please answer all survey questions.' }, { status: 400 })
     }
 
     const { data: targetCompany, error: targetErr } = await supabaseAdmin
@@ -46,16 +56,21 @@ export async function POST(req: NextRequest) {
       role: role || 'company',
     })
 
-    await supabaseAdmin.from('companies').update({ claimed: true }).eq('id', company_id)
+    const segment = determineSegment(biggest_challenge, active_accounts, growth_capacity)
+    const cashflow_flag = biggest_challenge === 'Cash flow — getting paid on time'
+    const acquisition_flag = biggest_challenge === 'Already busy — thinking about growth or eventually selling the business'
 
-    const segment = determineSegment(biggest_challenge, marketing_budget)
+    await supabaseAdmin
+      .from('companies')
+      .update({ claimed: true, cashflow_flag, acquisition_flag })
+      .eq('id', company_id)
 
     await supabaseAdmin.from('company_onboarding').insert({
       company_id,
-      how_getting_clients,
+      lead_source,
       biggest_challenge,
-      new_clients_per_month,
-      marketing_budget,
+      active_accounts,
+      growth_capacity,
       segment,
       contacted: false,
     })
@@ -87,7 +102,7 @@ export async function POST(req: NextRequest) {
           `<div style="font-family:sans-serif;max-width:600px">
             <p>Hi ${firstName},</p>
             <p>Your listing is now live. Facility managers in ${company.city} are actively searching.</p>
-            <p>Leads available from $25 each in your dashboard.</p>
+            <p>New leads are waiting for you in your dashboard.</p>
             <a href="${siteUrl}/dashboard/leads" style="display:inline-block;background:#1B3A6B;color:white;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:bold">View Available Leads</a>
           </div>`
         )
@@ -111,7 +126,10 @@ export async function POST(req: NextRequest) {
          <p><strong>Email:</strong> ${email}</p>
          <p><strong>Segment:</strong> ${segment}</p>
          <p><strong>Challenge:</strong> ${biggest_challenge}</p>
-         <p><strong>Budget:</strong> ${marketing_budget}</p>
+         <p><strong>Active accounts:</strong> ${active_accounts}</p>
+         <p><strong>Growth capacity:</strong> ${growth_capacity}</p>
+         ${cashflow_flag ? '<p><strong>⚑ Cash-flow flag</strong></p>' : ''}
+         ${acquisition_flag ? '<p><strong>⚑ Acquisition flag</strong></p>' : ''}
          <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>`
       )
     }
@@ -139,13 +157,29 @@ export async function POST(req: NextRequest) {
   }
 }
 
-function determineSegment(biggest_challenge: string, marketing_budget: string): string {
-  if (biggest_challenge === 'Not getting enough leads' &&
-    (marketing_budget === '$500–$1,000/month' || marketing_budget === 'Over $1,000/month')) {
+function determineSegment(biggest_challenge: string, active_accounts: string, growth_capacity: string): string {
+  const leadChallenge =
+    biggest_challenge === 'Not enough leads / inconsistent work' ||
+    biggest_challenge === 'Missed calls or slow follow-up'
+  const hasVolume =
+    active_accounts === '6-20' || active_accounts === '21-50' || active_accounts === '50+' ||
+    growth_capacity === '5-9' || growth_capacity === '10+'
+
+  if (leadChallenge && hasVolume) {
     return 'HOT'
   }
-  if (biggest_challenge === 'Not getting enough leads' && marketing_budget === '$200–$500/month') {
+
+  if (
+    biggest_challenge === 'Hiring and keeping good staff' ||
+    biggest_challenge === 'Managing scheduling and operations' ||
+    (biggest_challenge === 'Not enough leads / inconsistent work' && active_accounts === '1-5')
+  ) {
     return 'WARM'
   }
-  return 'NURTURE'
+
+  if (active_accounts === '1-5' && growth_capacity === "0-1, we're at capacity") {
+    return 'NURTURE'
+  }
+
+  return 'WARM'
 }

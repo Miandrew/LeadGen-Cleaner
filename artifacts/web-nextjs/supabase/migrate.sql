@@ -98,10 +98,41 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS company_onboarding (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   company_id uuid REFERENCES companies(id),
-  how_getting_clients text[], biggest_challenge text,
-  new_clients_per_month text, marketing_budget text,
+  lead_source text[], biggest_challenge text,
+  active_accounts text, growth_capacity text,
   segment text, contacted boolean DEFAULT false,
   created_at timestamp DEFAULT now()
+);
+
+-- Onboarding survey rename (existing DBs) — guarded so it is safe on fresh DBs too
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'company_onboarding' AND column_name = 'how_getting_clients') THEN
+    ALTER TABLE company_onboarding RENAME COLUMN how_getting_clients TO lead_source;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'company_onboarding' AND column_name = 'new_clients_per_month') THEN
+    ALTER TABLE company_onboarding RENAME COLUMN new_clients_per_month TO active_accounts;
+  END IF;
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'company_onboarding' AND column_name = 'marketing_budget') THEN
+    ALTER TABLE company_onboarding RENAME COLUMN marketing_budget TO growth_capacity;
+  END IF;
+END $$;
+ALTER TABLE company_onboarding ADD COLUMN IF NOT EXISTS lead_source text[];
+ALTER TABLE company_onboarding ADD COLUMN IF NOT EXISTS active_accounts text;
+ALTER TABLE company_onboarding ADD COLUMN IF NOT EXISTS growth_capacity text;
+
+-- Company-level intelligence flags (independent of HOT/WARM/NURTURE segment)
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS cashflow_flag boolean DEFAULT false;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS acquisition_flag boolean DEFAULT false;
+
+-- Self-serve "Request This Lead" (no payment)
+CREATE TABLE IF NOT EXISTS lead_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_id uuid REFERENCES leads(id),
+  company_id uuid REFERENCES companies(id),
+  status text DEFAULT 'requested',
+  requested_at timestamp DEFAULT now(),
+  UNIQUE(lead_id, company_id)
 );
 
 CREATE TABLE IF NOT EXISTS featured_listings (

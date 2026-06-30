@@ -98,8 +98,8 @@ export default async function DashboardPage() {
       }
     : hasPurchases && !hasSubscription
     ? {
-        message: `You've bought leads individually. Subscribe to get them delivered automatically — no unlocking required.`,
-        cta: 'See Plans →',
+        message: `Want leads delivered automatically and your follow-up handled for you? Book a quick call and we'll build the right plan.`,
+        cta: 'Book a Call →',
         href: '/dashboard/subscription',
         color: 'bg-amber-50 border-amber-200',
         textColor: 'text-amber-900',
@@ -170,13 +170,13 @@ export default async function DashboardPage() {
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
           <h2 className="font-semibold text-gray-900 mb-4">Recent Purchases</h2>
           <div className="space-y-3">
-            {recentPurchases.map((p: { id: string; amount_paid: number; purchased_at: string; leads: { service_type: string; city: string } | null }) => (
+            {recentPurchases.map((p: { id: string; purchased_at: string; leads: { service_type: string; city: string } | null }) => (
               <div key={p.id} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
                 <div>
                   <div className="text-sm font-medium">{p.leads?.service_type} in {p.leads?.city}</div>
                   <div className="text-xs text-gray-400">{getRelativeTime(p.purchased_at)}</div>
                 </div>
-                <span className="text-sm font-bold text-green-600">${p.amount_paid}</span>
+                <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full">Unlocked</span>
               </div>
             ))}
           </div>
