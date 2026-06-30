@@ -14,8 +14,8 @@ export async function GET(req: NextRequest) {
 
   for (const user of users || []) {
     let leads_remaining = 0
-    if (user.subscription_tier === 'essentials') leads_remaining = 5
-    else if (user.subscription_tier === 'growth') leads_remaining = 999
+    if (user.subscription_tier === 'growth') leads_remaining = 10
+    else if (user.subscription_tier === 'unlimited') leads_remaining = 999
 
     await supabaseAdmin.from('users').update({ leads_remaining }).eq('id', user.id)
   }

@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
           })
         } else {
           // Standard subscription tier
-          const leadsMap: Record<string, number> = { essentials: 5, growth: 999 }
+          const leadsMap: Record<string, number> = { growth: 10, unlimited: 999 }
           await supabaseAdmin.from('users').update({
             subscription_status: 'active',
             subscription_tier: tier,
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
       if (company_id) {
         const priceId = sub.items.data[0]?.price?.id
         const tier = getPlanTier(priceId)
-        const leadsMap: Record<string, number> = { essentials: 5, growth: 999 }
+        const leadsMap: Record<string, number> = { growth: 10, unlimited: 999 }
         await supabaseAdmin.from('users').update({
           subscription_status: 'active',
           subscription_tier: tier,
@@ -145,7 +145,7 @@ export async function POST(req: NextRequest) {
 }
 
 function getPlanTier(priceId: string | undefined): string {
-  if (priceId === process.env.STRIPE_ESSENTIALS_PRICE_ID) return 'essentials'
   if (priceId === process.env.STRIPE_GROWTH_PRICE_ID) return 'growth'
-  return 'essentials'
+  if (priceId === process.env.STRIPE_UNLIMITED_PRICE_ID) return 'unlimited'
+  return 'growth'
 }

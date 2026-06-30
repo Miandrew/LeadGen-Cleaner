@@ -21,29 +21,29 @@ const PLANS = [
     highlight: false,
   },
   {
-    name: 'Essentials',
-    price: '$149',
+    name: 'Growth',
+    price: '$199',
     per: '/month',
     desc: 'Leads delivered automatically plus the full automation suite.',
     features: [
-      'Free leads included — delivered automatically',
+      '10 leads/month — delivered automatically',
       'Automated SMS follow-up within 2 minutes of every lead',
       'Missed call text-back — no lead falls through',
       'Automated review request sequences',
       'Boosted directory ranking',
       'Cancel anytime',
     ],
-    cta: 'Start Essentials',
+    cta: 'Start Growth',
     href: '/claim',
     highlight: false,
   },
   {
-    name: 'Growth',
-    price: '$349',
+    name: 'Unlimited',
+    price: '$399',
     per: '/month',
-    desc: 'Everything in Essentials plus active management of your Google presence.',
+    desc: 'Everything in Growth plus active management of your Google presence.',
     features: [
-      'Everything in Essentials',
+      'Unlimited leads — delivered automatically',
       'Semi-exclusive leads — max 2 companies per lead',
       'Google Business Profile management — 4 posts/month',
       'Review response management within 48 hours',
@@ -51,7 +51,7 @@ const PLANS = [
       'Optional monthly strategy call',
       'Cancel anytime',
     ],
-    cta: 'Start Growth',
+    cta: 'Start Unlimited',
     href: '/claim',
     highlight: true,
   },
@@ -200,7 +200,7 @@ export default async function ForCleaningCompaniesPage() {
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-8 text-center max-w-3xl mx-auto">
             <p className="text-sm text-amber-900">
-              At $35/lead, the Essentials plan pays for itself after just 5 leads — and includes the full automation suite running in the background.
+              At $35/lead, the Growth plan pays for itself after just 6 leads — and includes the full automation suite running in the background.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
