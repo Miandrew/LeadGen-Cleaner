@@ -138,7 +138,7 @@ function ClaimSearchContent() {
             {[
               { icon: '📋', title: 'Manage Your Profile', desc: 'Update your services, photos, and business info' },
               { icon: '📬', title: 'Receive Quote Requests', desc: 'Get notified when facility managers request quotes' },
-              { icon: '💼', title: 'Unlock Contact Details', desc: 'Pay $35 per lead or subscribe for unlimited access' },
+              { icon: '💼', title: 'Unlock Contact Details', desc: 'Flexible options to access leads and grow your business' },
             ].map((item) => (
               <div key={item.title} className="bg-white rounded-xl border border-gray-200 p-5">
                 <div className="text-3xl mb-3">{item.icon}</div>
