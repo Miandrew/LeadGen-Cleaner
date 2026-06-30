@@ -45,7 +45,7 @@ export default async function DashboardPage() {
 
   const company = user.companies as Record<string, unknown>
 
-  if (company.verification_status === 'pending') {
+  if (company.verification_status !== 'verified') {
     redirect('/claim/verify')
   }
 

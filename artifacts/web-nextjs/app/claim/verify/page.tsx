@@ -39,7 +39,10 @@ export default function ClaimVerifyPage() {
     script.async = true
     document.head.appendChild(script)
 
+    const CALENDLY_ORIGINS = ['https://calendly.com', 'https://assets.calendly.com']
+
     const handleMessage = async (e: MessageEvent) => {
+      if (!CALENDLY_ORIGINS.includes(e.origin)) return
       if (e.data?.event === 'calendly.event_scheduled') {
         setStatus('verifying')
         try {
