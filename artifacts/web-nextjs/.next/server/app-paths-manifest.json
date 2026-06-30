@@ -1,3 +1,4 @@
 {
+  "/claim/page": "app/claim/page.js",
   "/page": "app/page.js"
 }
