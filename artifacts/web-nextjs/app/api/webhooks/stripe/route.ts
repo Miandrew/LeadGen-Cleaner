@@ -99,6 +99,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (event.type === 'customer.subscription.updated') {
+      const updatedSub = event.data.object as Stripe.Subscription
+      const company_id = updatedSub.metadata?.company_id
+      if (company_id) {
+        const priceId = updatedSub.items.data[0]?.price?.id
+        const tier = getPlanTier(priceId)
+        const leadsMap: Record<string, number> = { growth: 10, unlimited: 999 }
+        // If subscription is being reactivated (cancel_at_period_end toggled off)
+        const newStatus = updatedSub.status === 'active' ? 'active' : updatedSub.status
+        await supabaseAdmin.from('users').update({
+          subscription_status: newStatus,
+          subscription_tier: tier,
+          leads_remaining: leadsMap[tier] || 0,
+        }).eq('company_id', company_id)
+      }
+    }
+
     if (event.type === 'customer.subscription.deleted') {
       const deletedSub = event.data.object as Stripe.Subscription
       const company_id = deletedSub.metadata?.company_id
