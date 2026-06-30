@@ -7,14 +7,16 @@ export const revalidate = 3600
 
 const PLANS = [
   {
-    name: 'Pay Per Lead',
+    name: 'Pay As You Go',
+    headline: 'Try the Platform With No Commitment',
     price: '$35',
-    per: 'per lead',
-    desc: 'No commitment. Pay only when you want to contact a facility manager.',
+    per: 'per qualified lead',
+    desc: 'Purchase qualified commercial cleaning opportunities individually. Only pay for the leads you choose.',
     features: [
-      'Full contact details: name, company, email, phone',
+      'View lead details before purchasing',
+      'Full contact info: name, company, email, phone',
       'See building type, size, and cleaning frequency',
-      'No monthly fee — pay only when you want',
+      'No subscription required',
     ],
     cta: 'Claim Free Listing',
     href: '/claim',
@@ -22,16 +24,19 @@ const PLANS = [
   },
   {
     name: 'Growth',
+    headline: 'Win More Commercial Cleaning Contracts',
     price: '$199',
     per: '/month',
-    desc: 'Leads delivered automatically plus the full automation suite.',
+    desc: 'For growing commercial cleaning companies that want consistent opportunities and automated follow-up.',
     features: [
-      '10 leads/month — delivered automatically',
-      'Automated SMS follow-up within 2 minutes of every lead',
-      'Missed call text-back — no lead falls through',
-      'Automated review request sequences',
-      'Boosted directory ranking',
-      'Cancel anytime',
+      'Priority access to qualified commercial cleaning opportunities',
+      'Monthly lead allocation based on your market',
+      'Instant SMS follow-up for every new lead',
+      'Missed-call text back — never lose a prospect',
+      'Automated review request campaigns',
+      'Sales pipeline for every opportunity',
+      'Higher placement in directory search results',
+      'Email support',
     ],
     cta: 'Start Growth',
     href: '/claim',
@@ -39,17 +44,19 @@ const PLANS = [
   },
   {
     name: 'Unlimited',
+    headline: 'Become the Highest Visibility Cleaning Company in Your Market',
     price: '$399',
     per: '/month',
-    desc: 'Everything in Growth plus active management of your Google presence.',
+    desc: 'For established companies focused on growth, efficiency, and market leadership.',
     features: [
-      'Unlimited leads — delivered automatically',
-      'Semi-exclusive leads — max 2 companies per lead',
-      'Google Business Profile management — 4 posts/month',
-      'Review response management within 48 hours',
-      'Pipeline dashboard — track every lead',
-      'Optional monthly strategy call',
-      'Cancel anytime',
+      'Everything in Growth',
+      'Highest priority for marketplace lead distribution',
+      'Semi-exclusive leads — maximum allocation per market',
+      'Google Business Profile management workflow',
+      'Review monitoring and response workflow',
+      'Advanced pipeline reporting',
+      'Monthly strategy session scheduling',
+      'Priority support',
     ],
     cta: 'Start Unlimited',
     href: '/claim',
@@ -200,7 +207,7 @@ export default async function ForCleaningCompaniesPage() {
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-8 text-center max-w-3xl mx-auto">
             <p className="text-sm text-amber-900">
-              At $35/lead, the Growth plan pays for itself after just 6 leads — and includes the full automation suite running in the background.
+              Most commercial cleaning contracts are worth $1,000–$3,000/year. The Growth plan pays for itself the moment you close one contract.
             </p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -217,7 +224,8 @@ export default async function ForCleaningCompaniesPage() {
                   </div>
                 )}
                 <div className="mb-5">
-                  <h3 className="text-lg font-bold text-navy mb-1">{plan.name}</h3>
+                  <p className="text-xs font-semibold text-accent uppercase tracking-wide mb-1">{plan.name}</p>
+                  <h3 className="text-base font-bold text-navy mb-2 leading-snug">{plan.headline}</h3>
                   <div className="flex items-end gap-1">
                     <span className="text-4xl font-black text-gray-900">{plan.price}</span>
                     <span className="text-gray-400 mb-1 text-sm">{plan.per}</span>
